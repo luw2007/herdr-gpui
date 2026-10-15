@@ -70,6 +70,7 @@ pub(super) fn open(
                 },
                 true,
             ));
+            view.list_all_endpoints();
             view.open_add_device(window, cx);
             view.start_device_discovery_with(run, cx);
         });

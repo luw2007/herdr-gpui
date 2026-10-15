@@ -43,6 +43,7 @@ fn washed(
             snapshot.workspaces[0].label = "remote workspace".into();
             snapshot.agents[0].pane_id = "r0".into();
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view.selected_endpoint = selected_endpoint;
             view
         });

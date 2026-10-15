@@ -184,7 +184,7 @@ impl HerdrWindow {
         self.config
             .sidebar_style
             .device_footer
-            .shown(self.endpoints.len(), self.cloud_jobs_pending())
+            .shown(self.device_count(), self.cloud_jobs_pending())
     }
 
     /// Where the Sessions list opens while the footer is hidden: the sidebar's
@@ -226,7 +226,7 @@ impl HerdrWindow {
             .and_then(|id| self.endpoints.iter().find(|endpoint| &endpoint.id == id))
             .map_or("All Devices", |endpoint| endpoint.label.as_str());
         let connected = self.endpoints.iter().any(|endpoint| {
-            self.device_visible(&endpoint.id) && endpoint.live.status.is_connected()
+            self.device_visible(endpoint.device_id()) && endpoint.live.status.is_connected()
         });
         div()
             .id("device-footer")
@@ -404,9 +404,9 @@ impl HerdrWindow {
         let connected = self
             .endpoints
             .iter()
-            .filter(|e| e.live.status.is_connected())
+            .filter(|e| e.slot.is_none() && e.live.status.is_connected())
             .count();
-        let count = self.endpoints.len();
+        let count = self.device_count();
         let mut rows = vec![(
             "All Devices".to_owned(),
             format!(
@@ -416,28 +416,35 @@ impl HerdrWindow {
             self.device_filter.is_none(),
             true,
         )];
-        rows.extend(self.endpoints.iter().map(|endpoint| {
-            let detail = match &endpoint.connection.target {
-                ConnectTarget::Ssh { target, session } => format!("{target} · {session}"),
-                #[cfg(feature = "cloud")]
-                ConnectTarget::Cloud {
-                    provider,
-                    machine,
-                    session,
-                    ..
-                } => format!("{} {machine} · {session}", crate::cloud::name(*provider)),
-                ConnectTarget::Wsl { distro, session } => format!("WSL {distro} · {session}"),
-                ConnectTarget::Socket(path) => path.display().to_string(),
-                ConnectTarget::Session { name, .. } => format!("This device · {name}"),
-                ConnectTarget::Local => "This device".into(),
-            };
-            (
-                endpoint.label.clone(),
-                format!("{detail} · {}", endpoint.status()),
-                self.device_filter.as_ref() == Some(&endpoint.id),
-                endpoint.enabled,
-            )
-        }));
+        rows.extend(
+            self.endpoints
+                .iter()
+                .filter(|e| e.slot.is_none())
+                .map(|endpoint| {
+                    let detail = match &endpoint.connection.target {
+                        ConnectTarget::Ssh { target, session } => format!("{target} · {session}"),
+                        #[cfg(feature = "cloud")]
+                        ConnectTarget::Cloud {
+                            provider,
+                            machine,
+                            session,
+                            ..
+                        } => format!("{} {machine} · {session}", crate::cloud::name(*provider)),
+                        ConnectTarget::Wsl { distro, session } => {
+                            format!("WSL {distro} · {session}")
+                        }
+                        ConnectTarget::Socket(path) => path.display().to_string(),
+                        ConnectTarget::Session { name, .. } => format!("This device · {name}"),
+                        ConnectTarget::Local => "This device".into(),
+                    };
+                    (
+                        endpoint.label.clone(),
+                        format!("{detail} · {}", endpoint.status()),
+                        self.device_filter.as_ref() == Some(&endpoint.id),
+                        endpoint.enabled,
+                    )
+                }),
+        );
         rows.push((
             "Add Device…".into(),
             self.device_setup_unavailable()
@@ -461,7 +468,10 @@ impl HerdrWindow {
                     .child("DEVICES"),
             );
         for (index, (label, detail, checked, enabled)) in rows.into_iter().enumerate() {
-            let endpoint = index.checked_sub(1).and_then(|i| self.endpoints.get(i));
+            let endpoint = index
+                .checked_sub(1)
+                .and_then(|i| self.endpoints.get(i))
+                .filter(|e| e.slot.is_none());
             view = view.child(
                 div()
                     .id(("device-row", index))
@@ -503,7 +513,7 @@ impl HerdrWindow {
                                                 .text_color(rgb(self.theme.foreground)),
                                         )
                                     })
-                                    .when(index > self.endpoints.len(), |row| {
+                                    .when(index > self.device_count(), |row| {
                                         row.child(
                                             svg()
                                                 .path("icons/plus.svg")
@@ -660,16 +670,20 @@ impl HerdrWindow {
     }
 
     fn choose_device(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        if index > self.endpoints.len() + 1 {
+        if index > self.device_count() + 1 {
             return;
         }
-        if index == self.endpoints.len() + 1 {
+        if index == self.device_count() + 1 {
             self.open_device_setup(window, cx);
         } else {
             let filter = if index == 0 {
                 None
             } else {
-                let Some(endpoint) = self.endpoints.get(index - 1).filter(|e| e.enabled) else {
+                let Some(endpoint) = self
+                    .endpoints
+                    .get(index - 1)
+                    .filter(|e| e.enabled && e.slot.is_none())
+                else {
                     return;
                 };
                 Some(endpoint.id.clone())
@@ -705,7 +719,7 @@ impl HerdrWindow {
             }
         } else {
             let key = event.keystroke.key.as_str();
-            let count = self.endpoints.len() + 2;
+            let count = self.device_count() + 2;
             match key {
                 "up" | "down" => {
                     let index = self.menu.selected.unwrap_or(0).min(count - 1);

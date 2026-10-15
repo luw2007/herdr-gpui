@@ -342,6 +342,7 @@ fn endpoint_retargeting_drops_a_pending_press(cx: &mut gpui::TestAppContext) {
         );
         remote.live.supports_surface = true;
         view.endpoints.push(remote);
+        view.list_all_endpoints();
     });
     let link = at(&view, cx, 2, 0);
     cx.simulate_mouse_down(link, MouseButton::Left, Modifiers::default());
@@ -350,7 +351,7 @@ fn endpoint_retargeting_drops_a_pending_press(cx: &mut gpui::TestAppContext) {
         (view.live.surface.clone(), view.live.snapshot.clone())
     });
     view.update(cx, |view, cx| {
-        view.select_device_session("ssh:box", "other", cx);
+        view.attach_session(crate::containers::SessionRef::new("ssh:box", "other"), cx);
         assert!(view.pressed_terminal_link.is_none());
         view.live.surface = surface;
         view.live.snapshot = snapshot;

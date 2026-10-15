@@ -41,6 +41,7 @@ fn workspace_dialogs_and_prs_are_fenced_by_host_and_generation(cx: &mut gpui::Te
             remote.live = view.live.clone();
             remote.live.local_daemon_peer = true;
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view.open_workspace_menu("w3", Default::default(), window, cx);
             view.open_workspace_dialog(WorkspaceAction::Rename, window, cx);
             view.endpoints[0].generation += 1;

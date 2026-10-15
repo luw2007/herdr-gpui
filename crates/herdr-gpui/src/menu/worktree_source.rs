@@ -622,7 +622,7 @@ impl HerdrWindow {
         if self.menu.target.is_none() || !self.menu_target_current() {
             return Err(crate::Error::StaleWorkspace);
         }
-        if self.selected_endpoint != 0 || !self.live.local_daemon_peer {
+        if !self.selected_is_local() || !self.live.local_daemon_peer {
             return Err(crate::Error::PrUntrustedEndpoint);
         }
         let workspace = self

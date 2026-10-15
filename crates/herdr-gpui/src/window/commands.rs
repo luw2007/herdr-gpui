@@ -235,6 +235,14 @@ impl HerdrWindow {
                 log_window::open(cx);
                 return;
             }
+            Command::NewContainer => {
+                let _ = self.new_container(None, cx);
+                return;
+            }
+            Command::NextContainer | Command::PreviousContainer => {
+                self.step_container(command == Command::NextContainer, cx);
+                return;
+            }
             Command::NewWindow => {
                 // Another client of the same launch target, not another daemon.
                 open_additional_window(self.endpoints[0].connection.target.clone(), cx);

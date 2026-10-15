@@ -620,6 +620,7 @@ mod tests {
                 ConnectTarget::Socket("/unused-transfer-test.sock".into()),
                 false,
             ));
+            view.list_all_endpoints();
             view.selected_endpoint = 1;
             view.local_transfer_notice("Copy failed", "Cannot copy\x1b\ntext".into(), cx);
             assert!(view.endpoints[0].toasts.entries.is_empty());

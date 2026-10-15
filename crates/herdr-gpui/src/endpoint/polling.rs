@@ -108,6 +108,11 @@ impl HerdrWindow {
             changed = Redraw::Window;
         }
         self.restore_selection(cx);
+        self.restore_container_selection(cx);
+        if std::mem::take(&mut self.containers_dirty) {
+            self.containers_changed(cx);
+            changed = Redraw::Window;
+        }
         if self.tick_toasts(
             self.menu.page.is_some() || self.toasts_hidden,
             Instant::now(),
@@ -206,7 +211,9 @@ impl HerdrWindow {
             if let Some(reason) = &self.live.error {
                 error.push_str(&format!(": {reason}"));
             }
-            if self.selected_endpoint != 0 {
+            if self.endpoints[self.selected_endpoint].device_id() != LOCAL
+                || self.endpoints[self.selected_endpoint].slot.is_some()
+            {
                 self.switch_endpoint(LOCAL, cx);
             } else {
                 // Recover Local with a fresh active handshake, even if the
@@ -263,7 +270,7 @@ impl HerdrWindow {
         self.endpoints
             .iter()
             .skip(1)
-            .filter(|endpoint| endpoint.enabled)
+            .filter(|endpoint| endpoint.enabled && endpoint.slot.is_none())
             .filter_map(|endpoint| {
                 Some((
                     endpoint.id.clone(),

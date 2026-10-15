@@ -121,6 +121,7 @@ fn open_window_placed(
         bounds.origin += point(step, step);
         crate::window_state::WindowState::placement(bounds, cx)
     });
+    let containers = crate::window_state::WindowState::take_containers(cx);
     cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -141,7 +142,11 @@ fn open_window_placed(
                     fixture,
                 );
                 view.updater = updater;
+                if let Some(set) = containers {
+                    view.install_containers(set);
+                }
                 crate::window_state::WindowState::observe(window, cx);
+                view.containers_changed(cx);
                 view
             })
         },

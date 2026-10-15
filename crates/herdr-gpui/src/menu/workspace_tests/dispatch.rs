@@ -23,6 +23,7 @@ fn add_host(view: &mut HerdrWindow, name: &str, label: &str) {
     );
     remote.live = view.live.clone();
     view.endpoints.push(remote);
+    view.list_all_endpoints();
 }
 
 // Only POSIX clients can script another host, so only they dispatch.

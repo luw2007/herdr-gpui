@@ -40,6 +40,7 @@ fn toast_navigation_queues_typed_targets_and_fences_input(cx: &mut gpui::TestApp
             view.update(cx, |view, cx| {
                 view.endpoints.truncate(1);
                 view.endpoints.push(endpoint);
+                view.list_all_endpoints();
                 view.selected_endpoint = 1;
                 view.options = ConnectOptions::default();
                 view.reset_selected(cx);
@@ -101,6 +102,7 @@ fn wire_completion_waits_for_evidence_then_command_uses_original_pane(
     let now = Instant::now();
     view.update(cx, |view, _| {
         view.endpoints.push(endpoint);
+        view.list_all_endpoints();
         view.config.notifications.enabled = true;
         view.config.notifications.delay_seconds = 0;
         view.tick_toasts(false, now);
@@ -173,6 +175,7 @@ fn toast_click_uses_origin_and_close_never_navigates(cx: &mut gpui::TestAppConte
             view.endpoints[0].live.snapshot = remote.live.snapshot.clone();
             view.endpoints[0].detached = true;
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             window.focus(&view.focus, cx);
             view.marked = "composition".into();
         });
@@ -230,6 +233,7 @@ fn toast_rendered_clicks_reject_replaced_removed_and_disabled_origins(
             view.update(cx, |view, _| {
                 view.endpoints.truncate(1);
                 view.endpoints.push(remote);
+                view.list_all_endpoints();
             });
             window.draw(cx).clear(cx);
         });
@@ -280,6 +284,7 @@ fn toast_queue_failure_retains_notice(cx: &mut gpui::TestAppContext) {
             .preview()]);
     view.update(cx, |view, cx| {
         view.endpoints.push(endpoint);
+        view.list_all_endpoints();
         view.selected_endpoint = 1;
         view.options = ConnectOptions::default();
         view.reset_selected(cx);
@@ -335,6 +340,7 @@ fn notification_command_rejects_ineligible_cards_without_selection_or_requests(
                 view.menu.reset();
                 view.endpoints.truncate(1);
                 view.endpoints.push(endpoint);
+                view.list_all_endpoints();
                 view.selected_endpoint = 0;
                 view.toasts_hidden = case == 5;
                 if case == 6 {

@@ -174,6 +174,7 @@ fn backend_cleanup_failure_survives_host_switch_without_disclosing_diagnostics(
             },
             true,
         ));
+        view.list_all_endpoints();
         view.selected_endpoint = 1;
         view.selection_epoch += 1;
         view.poll_file_transfer(cx);
@@ -220,6 +221,7 @@ fn duplicate_copy_never_invokes_second_backend(cx: &mut TestAppContext) {
             |_, _| panic!("failed uploads must not be cleaned up twice"),
             cx,
         );
+        view.list_all_endpoints();
         let token = view.file_transfer.as_ref().unwrap().cancelled.clone();
         view.start_file_transfer_with(
             InputTarget::Pane("w1:p1".into()),

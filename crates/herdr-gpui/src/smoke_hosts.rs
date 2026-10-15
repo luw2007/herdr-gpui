@@ -52,6 +52,7 @@ pub(super) async fn sidebar_hosts(
                     *inbox = endpoint.live.clone();
                 }
                 view.endpoints.push(endpoint);
+                view.list_all_endpoints();
             }
             view.selected_endpoint = 0;
             view.live = view.endpoints[0].live.clone();

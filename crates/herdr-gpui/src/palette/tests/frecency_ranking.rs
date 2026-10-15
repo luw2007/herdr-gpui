@@ -121,6 +121,7 @@ fn choosing_a_go_to_row_boosts_it_the_next_time(cx: &mut TestAppContext) {
         remote.live.snapshot = Some(Arc::new(snapshot()));
         remote.live.status = crate::state::ConnectionStatus::Connected;
         view.endpoints.push(remote);
+        view.list_all_endpoints();
         view
     });
     cx.update(|window, cx| {

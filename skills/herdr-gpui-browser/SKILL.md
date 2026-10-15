@@ -214,6 +214,7 @@ for what only Herdr UI shows or keeps.
 | Open a dev server in a tab, forwarded when you run on an SSH host | `herdr-gpui ports open 3000` |
 | See the processes under a pane, with CPU and memory | `herdr-gpui processes` |
 | List or focus the app's windows and its own tabs | `herdr-gpui window`, `herdr-gpui tab`, `herdr-gpui tab focus ID` |
+| List the logical Windows inside this app window, or attach a session to the active one | `herdr-gpui container`, `herdr-gpui container attach NAME` |
 | Help the user find a saved session by project, branch, or path | `herdr-gpui sessions QUERY` (opens the manager; the user chooses and confirms) |
 | Block until something happens in the app | `herdr-gpui wait tab-closed ID --timeout 600`, `herdr-gpui events --follow` |
 | Read or change a Herdr UI setting | `herdr-gpui config get KEY`, `herdr-gpui config set KEY VALUE` |

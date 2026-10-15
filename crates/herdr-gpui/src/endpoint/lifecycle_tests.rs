@@ -274,6 +274,7 @@ fn connected_endpoint(id: &str) -> (Endpoint, Server) {
 fn prepare_mouse(view: &mut HerdrWindow, endpoint: Endpoint, cx: &mut Context<HerdrWindow>) {
     view.endpoints.truncate(1);
     view.endpoints.push(endpoint);
+    view.list_all_endpoints();
     view.selected_endpoint = 1;
     view.options = ConnectOptions::default();
     view.reset_selected(cx);

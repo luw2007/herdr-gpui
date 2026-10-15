@@ -92,6 +92,7 @@ fn a_changed_device_refuses_to_stop(cx: &mut TestAppContext) {
                 ssh("old.invalid", "default"),
                 true,
             ));
+            view.list_all_endpoints();
             view.sessions.devices.answers.insert(
                 "ssh:test".into(),
                 DeviceScan::Sessions(vec![RemoteSession {
@@ -159,6 +160,7 @@ fn pausing_fences_only_the_same_host_and_session(cx: &mut TestAppContext) {
                     ssh(host, session),
                     true,
                 ));
+                view.list_all_endpoints();
             }
             assert!(!view.pause_session_endpoints(&ssh("host.invalid", "demo")));
             assert!(paused(&view.endpoints[1]));
@@ -258,6 +260,7 @@ fn a_replaced_host_is_not_marked_stopped_when_the_old_stop_finishes(cx: &mut Tes
                 ssh("old.invalid", "default"),
                 true,
             ));
+            view.list_all_endpoints();
             view.sessions.devices.answers.insert(
                 "ssh:test".into(),
                 DeviceScan::Sessions(vec![RemoteSession {

@@ -164,6 +164,7 @@ fn same_named_sessions_on_two_devices_stay_distinct(cx: &mut TestAppContext) {
         view.update(cx, |view, _| {
             for (id, host) in [("ssh:a", "a.invalid"), ("ssh:b", "b.invalid")] {
                 view.endpoints.push(remote(id, id, host, "default"));
+                view.list_all_endpoints();
                 view.sessions
                     .devices
                     .answers

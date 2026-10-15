@@ -138,6 +138,7 @@ fn a_workspace_on_another_host_is_refused_with_how_to_select_it(cx: &mut TestApp
             live.snapshot = Some(std::sync::Arc::new(snapshot));
             remote.live = live;
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             let Response::Error { code, message } = status(view, &caller(Some("remote_w"))) else {
                 panic!("expected a refusal");
             };

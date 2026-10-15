@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used)]
 
+use crate::containers::SessionRef;
 use crate::{
     endpoint::LOCAL,
     menu::Page,
@@ -59,6 +60,19 @@ pub(super) fn draw(cx: &mut VisualTestContext) {
     cx.update(|window, cx| full_draw(window, cx).clear(cx));
 }
 
+/// What the window shows after a choice: the session on screen, and whether
+/// the current logical Window lists `device`'s `session`.
+fn shown(view: &crate::HerdrWindow) -> SessionRef {
+    view.endpoints[view.selected_endpoint].session_ref()
+}
+
+fn listed(view: &crate::HerdrWindow, device: &str, session: &str) -> bool {
+    view.containers
+        .active()
+        .slots
+        .contains(&SessionRef::new(device, session))
+}
+
 fn click(cx: &mut VisualTestContext, selector: &'static str) {
     let point = bounds(cx, selector).center();
     cx.simulate_click(point, Modifiers::default());
@@ -74,6 +88,7 @@ pub(super) fn open_list(
         let mut view = fixture_window(window, cx);
         view.endpoints[0].connection.target = current;
         view.sessions.entries = entries;
+        view.containers = crate::containers::ContainerSet::new(view.endpoints[0].session_ref());
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
@@ -216,6 +231,7 @@ fn on_the_first_device(
         }
         // The window is attached to the first saved device.
         view.selected_endpoint = 1;
+        view.containers = crate::containers::ContainerSet::new(view.endpoints[1].session_ref());
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
@@ -250,17 +266,29 @@ fn the_device_this_window_is_on_leads_with_all_of_its_sessions(cx: &mut TestAppC
 }
 
 #[gpui::test]
-fn choosing_another_session_of_the_device_it_is_on_retargets_that_device(cx: &mut TestAppContext) {
+fn choosing_another_session_of_the_device_it_is_on_adds_a_row_beside_it(cx: &mut TestAppContext) {
     let (view, cx) =
         on_the_first_device(cx, Some(reported(&[("default", true), ("agents", false)])));
     click(cx, "sessions-row-1");
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.menu.page, None, "choosing closes the list");
-        assert_eq!(view.selected_endpoint, 1, "it stays on the same device");
-        assert_eq!(view.device_filter.as_deref(), Some("ssh:build"));
+        assert_eq!(shown(view), SessionRef::new("ssh:build", "agents"));
+        assert!(
+            listed(view, "ssh:build", "default"),
+            "both sessions coexist"
+        );
+        assert!(listed(view, "ssh:build", "agents"));
         assert_eq!(
             view.endpoints[1].connection.target,
+            ConnectTarget::Ssh {
+                target: "build.invalid".into(),
+                session: "default".into(),
+            },
+            "the device keeps its own session"
+        );
+        assert_eq!(
+            view.endpoints[view.selected_endpoint].connection.target,
             ConnectTarget::Ssh {
                 target: "build.invalid".into(),
                 session: "agents".into(),
@@ -307,6 +335,7 @@ fn a_disabled_device_says_so_instead_of_waiting_for_an_answer(cx: &mut TestAppCo
             },
             false,
         ));
+        view.list_all_endpoints();
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
@@ -333,6 +362,7 @@ fn clicking_a_disabled_device_does_not_filter_the_list_to_it(cx: &mut TestAppCon
             },
             false,
         ));
+        view.list_all_endpoints();
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
@@ -366,6 +396,7 @@ fn a_disabled_device_is_never_asked_for_its_sessions(cx: &mut TestAppContext) {
             },
             false,
         ));
+        view.list_all_endpoints();
         view
     });
     let targets = cx.update(|_, cx| view.read(cx).probe_targets());
@@ -475,7 +506,7 @@ fn a_machine_where_every_session_runs_has_no_stopped_note(cx: &mut TestAppContex
 }
 
 #[gpui::test]
-fn choosing_a_local_session_retargets_the_local_endpoint(cx: &mut TestAppContext) {
+fn choosing_a_local_session_attaches_it_beside_the_current_one(cx: &mut TestAppContext) {
     let (view, cx) = open_list(
         cx,
         vec![
@@ -488,12 +519,14 @@ fn choosing_a_local_session_retargets_the_local_endpoint(cx: &mut TestAppContext
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.menu.page, None, "choosing closes the list");
+        assert!(listed(view, LOCAL, "default"), "the first session stays");
+        assert!(listed(view, LOCAL, "work"), "the chosen one joins it");
+        assert_eq!(shown(view), SessionRef::new(LOCAL, "work"));
         assert_eq!(
-            view.selected_endpoint, 0,
-            "the local endpoint stays current"
+            view.endpoints[0].connection.target,
+            development("default"),
+            "the first connection is never retargeted"
         );
-        assert_eq!(view.device_filter.as_deref(), Some(LOCAL));
-        assert_eq!(view.endpoints[0].connection.target, development("work"));
     });
 }
 
@@ -515,6 +548,7 @@ fn choosing_a_local_session_leaves_a_remote_endpoint(cx: &mut TestAppContext) {
             },
             true,
         ));
+        view.list_all_endpoints();
         // The list opens while the window is on the saved device.
         view.selected_endpoint = 1;
         view
@@ -531,9 +565,13 @@ fn choosing_a_local_session_leaves_a_remote_endpoint(cx: &mut TestAppContext) {
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.menu.page, None, "choosing closes the list");
-        assert_eq!(view.selected_endpoint, 0, "the local endpoint takes over");
-        assert_eq!(view.device_filter.as_deref(), Some(LOCAL));
-        assert_eq!(view.endpoints[0].connection.target, development("work"));
+        assert_eq!(shown(view), SessionRef::new(LOCAL, "work"));
+        assert!(listed(view, "ssh:fixture", "default"), "the device stays");
+        assert!(listed(view, LOCAL, "work"));
+        assert_eq!(
+            view.endpoints[1].connection.target.remote_session(),
+            Some("default")
+        );
     });
 }
 
@@ -570,7 +608,9 @@ fn keys_walk_the_rows_and_enter_chooses(cx: &mut TestAppContext) {
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.menu.page, None);
-        assert_eq!(view.endpoints[0].connection.target, development("work"));
+        assert_eq!(shown(view), SessionRef::new(LOCAL, "work"));
+        assert!(listed(view, LOCAL, "default") && listed(view, LOCAL, "work"));
+        assert_eq!(view.endpoints[0].connection.target, development("default"));
     });
 }
 
@@ -726,7 +766,7 @@ fn choosing_a_remote_row_selects_that_device(cx: &mut TestAppContext) {
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.selected_endpoint, 1, "the device became current");
-        assert_eq!(view.device_filter.as_deref(), Some("ssh:fixture"));
+        assert_eq!(shown(view), SessionRef::new("ssh:fixture", "default"));
         assert_eq!(view.menu.page, None);
     });
 }

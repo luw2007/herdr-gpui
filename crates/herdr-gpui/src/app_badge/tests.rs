@@ -222,6 +222,7 @@ fn hosts_disconnect_reconnect_and_disable_without_local_acknowledgement(
             remote.live.status = ConnectionStatus::Connected;
             remote.collapsed = true;
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view.sidebar_visible = false;
             view.active = true;
             view.toasts_hidden = true;

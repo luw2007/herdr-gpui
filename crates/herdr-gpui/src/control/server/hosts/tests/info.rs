@@ -16,6 +16,7 @@ fn a_host_is_selected_by_id_or_label_and_a_refusal_says_why(cx: &mut TestAppCont
             );
             off.enabled = false;
             view.endpoints.push(off);
+            view.list_all_endpoints();
             let mut chosen = Vec::new();
             let shown = select(view, "LOCAL", |_, id| {
                 chosen.push(id.to_owned());

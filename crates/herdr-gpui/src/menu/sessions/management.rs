@@ -120,7 +120,7 @@ impl HerdrWindow {
                 }
             }
             Target::Device { id, host } => {
-                if self.endpoints.iter().any(|e| {
+                if self.endpoints.iter().filter(|e| e.slot.is_none()).any(|e| {
                     let saved = e.saved_target();
                     saved.remote_host().as_ref() == Some(&host)
                         && saved.remote_session() == Some(name.as_str())
@@ -280,6 +280,7 @@ impl HerdrWindow {
                 // this one moves to default.
                 let current = window.window_handle().window_id();
                 self.pause_session_in_other_windows(&connection, current, cx);
+                self.retarget_session_in_other_windows(&connection, current, cx);
                 if self.retarget_session_for_deletion(&connection) {
                     self.reconnect(cx);
                     self.menu.page = Some(Page::Sessions);

@@ -81,19 +81,7 @@ impl Entry {
     }
 }
 
-/// The session a saved device attaches to. Asking the host what else it runs
-/// would be an SSH round trip this popup does not take.
-fn target_session(target: &ConnectTarget) -> String {
-    match target {
-        ConnectTarget::Ssh { session, .. }
-        | ConnectTarget::Wsl { session, .. }
-        | ConnectTarget::Session { name: session, .. } => session.clone(),
-        #[cfg(feature = "cloud")]
-        ConnectTarget::Cloud { session, .. } => session.clone(),
-        ConnectTarget::Socket(path) => path.display().to_string(),
-        ConnectTarget::Local => "default".to_owned(),
-    }
-}
+use crate::containers::{SessionRef, target_session};
 
 /// The state word a session paints, whether it was probed on this machine or
 /// reported by its host.
@@ -132,10 +120,26 @@ impl HerdrWindow {
         self.pin_first_session();
     }
 
-    /// The socket this window's local endpoint would dial. `Local` resolves
-    /// through the environment, so no session name can say which one is current.
-    fn local_socket(&self) -> Option<std::path::PathBuf> {
-        self.endpoints[0].connection.target.socket_path().ok()
+    /// Opens the picker straight on the new-session name form for this machine.
+    pub(crate) fn open_sessions_creating(
+        &mut self,
+        anchor: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_sessions(anchor, window, cx);
+        if self.menu.page == Some(Page::Sessions) {
+            self.open_session_create(management::Target::Local, window, cx);
+        }
+    }
+
+    /// Whether the current logical Window lists this session.
+    fn session_attached(&self, device: &str, session: &str) -> bool {
+        self.containers
+            .active()
+            .slots
+            .iter()
+            .any(|slot| slot.device == device && slot.session == session)
     }
 
     /// Every painted line, in paint order: the device this window is on leads,
@@ -148,7 +152,15 @@ impl HerdrWindow {
 
     /// The current page of lines and how many pages the matches fill.
     fn session_page_entries(&self) -> (Vec<Entry>, usize) {
-        let current = self.selected_endpoint;
+        // The device the shown session runs on; a session's own connection
+        // is not a device of the catalog.
+        let current = self
+            .endpoints
+            .iter()
+            .position(|e| {
+                e.slot.is_none() && e.id == self.endpoints[self.selected_endpoint].device_id()
+            })
+            .unwrap_or(0);
         let query = catalog::Query::new(self.session_query());
         let filter = self.session_filter();
         let narrowed = !query.is_empty() || filter != Filter::All;
@@ -162,7 +174,7 @@ impl HerdrWindow {
                 selector: "sessions-current-device".to_owned(),
                 text: format!("{} · CURRENT DEVICE", endpoint.label.to_uppercase()),
             }];
-            self.device_entries(&mut section, endpoint, current, &query, filter);
+            self.device_entries(&mut section, endpoint, &query, filter);
             sections.push(section);
         }
         let mut local = vec![Entry::Header {
@@ -177,7 +189,7 @@ impl HerdrWindow {
         }
         sections.push(local);
         let others: Vec<usize> = (1..self.endpoints.len())
-            .filter(|index| *index != current)
+            .filter(|index| *index != current && self.endpoints[*index].slot.is_none())
             .collect();
         let mut remote = Vec::new();
         if !others.is_empty() || current == 0 {
@@ -205,7 +217,7 @@ impl HerdrWindow {
                 selector: format!("sessions-device-{}", endpoint.id),
                 text: endpoint.label.to_uppercase(),
             }];
-            self.device_entries(&mut section, endpoint, index, &query, filter);
+            self.device_entries(&mut section, endpoint, &query, filter);
             devices.push(section);
         }
         let has_session = |section: &[Entry]| {
@@ -291,19 +303,17 @@ impl HerdrWindow {
         &self,
         entries: &mut Vec<Entry>,
         endpoint: &Endpoint,
-        index: usize,
         query: &catalog::Query,
         filter: Filter,
     ) {
         let narrowed = !query.is_empty() || filter != Filter::All;
         let saved = target_session(&endpoint.connection.target);
-        let attached = self.selected_endpoint == index;
         let fallback = || {
             (
                 saved.clone(),
                 endpoint.live.status.to_string(),
                 endpoint.live.status.is_connected(),
-                attached,
+                self.session_attached(&endpoint.id, &saved),
                 Vec::<SessionWorkspace>::new(),
             )
         };
@@ -326,7 +336,7 @@ impl HerdrWindow {
                                 session.name.clone(),
                                 state_word(session.running).to_owned(),
                                 session.running,
-                                attached && session.name == saved,
+                                self.session_attached(&endpoint.id, &session.name),
                                 session.workspaces.clone(),
                             )
                         }),
@@ -465,9 +475,7 @@ impl HerdrWindow {
             detail: state_word(session.state.running()).into(),
             context: catalog::summary(&session.workspaces, query).map(Into::into),
             online: session.state.running(),
-            checked: self
-                .local_socket()
-                .is_some_and(|socket| socket == session.socket),
+            checked: self.session_attached(crate::endpoint::LOCAL, &session.name),
             enabled: true,
         }
     }
@@ -783,48 +791,36 @@ impl HerdrWindow {
             Row::Add(target) => self.open_session_create(target, window, cx),
             Row::Local(name) => {
                 self.dismiss_menu(window, cx);
-                self.select_local_session(&name, cx);
-                // The picker's own follow-up: the sidebar follows the host that
-                // was just chosen, and another session's tree is not this one's.
-                self.device_filter = Some(self.endpoints[0].id.clone());
-                for scroll in &self.sidebar_scroll {
-                    scroll.set_offset(Point::default());
-                }
-                for revealed in &self.sidebar_revealed {
-                    revealed.set(None);
-                }
-                // The row a reveal left for the next frame is in the old list.
-                self.sidebar_pin_reveal.set(None);
+                self.attach_session(SessionRef::new(crate::endpoint::LOCAL, name), cx);
+                self.reset_sidebar_reveal();
             }
-            // A device row is one of that device's sessions, so it retargets the
-            // device rather than adding an endpoint for every session it runs.
+            // A device row is one of that device's sessions. It becomes a
+            // workspace row of the current logical Window beside the others.
             Row::Device { id, session } => {
                 // A disabled device has nothing to attach to, and the picker
-                // refuses the same click. Filtering the sidebar to it would leave
-                // the host list empty, so the menu stays as it is.
-                if !self
-                    .endpoints
-                    .iter()
-                    .any(|endpoint| endpoint.id == id && endpoint.enabled)
-                {
+                // refuses the same click.
+                if !self.endpoints.iter().any(|endpoint| {
+                    endpoint.slot.is_none() && endpoint.id == id && endpoint.enabled
+                }) {
                     return;
                 }
                 self.dismiss_menu(window, cx);
-                self.select_device_session(&id, &session, cx);
-                // The local branch's own follow-up: the sidebar follows the host
-                // that was just chosen, and another session's tree is not this
-                // one's.
-                self.device_filter = Some(id);
-                for scroll in &self.sidebar_scroll {
-                    scroll.set_offset(Point::default());
-                }
-                for revealed in &self.sidebar_revealed {
-                    revealed.set(None);
-                }
-                // The row a reveal left for the next frame is in the old list.
-                self.sidebar_pin_reveal.set(None);
+                self.attach_session(SessionRef::new(id, session), cx);
+                self.reset_sidebar_reveal();
             }
         }
+    }
+
+    /// The new row's tree is not the old one's: scroll and reveal restart.
+    fn reset_sidebar_reveal(&self) {
+        for scroll in &self.sidebar_scroll {
+            scroll.set_offset(Point::default());
+        }
+        for revealed in &self.sidebar_revealed {
+            revealed.set(None);
+        }
+        // The row a reveal left for the next frame is in the old list.
+        self.sidebar_pin_reveal.set(None);
     }
 
     pub(super) fn sessions_key(

@@ -406,6 +406,7 @@ fn hiding_agents_preserves_scrolled_multi_endpoint_lists(cx: &mut gpui::TestAppC
             agent.display_agent = Some("Remote Agent".into());
         }
         view.endpoints.push(remote);
+        view.list_all_endpoints();
         view
     });
     for width in [800., 360.] {

@@ -262,7 +262,7 @@ impl HerdrWindow {
             .endpoints
             .iter()
             .enumerate()
-            .filter(|(_, endpoint)| self.device_visible(&endpoint.id))
+            .filter(|(index, _)| self.endpoint_listed(*index))
             .map(|(index, endpoint)| {
                 let live = if index == self.selected_endpoint {
                     &self.live

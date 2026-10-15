@@ -41,6 +41,7 @@ fn banner_follows_snapshot_dismissal_and_selected_endpoint(cx: &mut TestAppConte
             herdr_client::ConnectTarget::Socket("/unused-config-diagnostic.sock".into()),
             true,
         ));
+        view.list_all_endpoints();
     });
 
     set_diagnostic(&view, 0, None, cx);

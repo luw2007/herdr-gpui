@@ -30,6 +30,7 @@ fn select_remote_fixture(view: &mut HerdrWindow) {
     );
     remote.live = view.live.clone();
     view.endpoints.push(remote);
+    view.list_all_endpoints();
     view.selected_endpoint = 1;
     view.live = view.endpoints[1].live.clone();
 }

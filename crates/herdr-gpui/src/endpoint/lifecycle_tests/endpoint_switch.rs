@@ -20,6 +20,7 @@ fn saved_selection_waits_for_snapshot_without_overwriting_preference(
         view.restore_selection(cx);
         assert!(view.catalog.restore_pending);
         view.endpoints.push(remote);
+        view.list_all_endpoints();
         for _ in 0..10 {
             view.restore_selection(cx);
             assert_eq!(view.selected_endpoint, 0);
@@ -61,6 +62,7 @@ fn another_endpoint_changing_keeps_the_selected_window_state(cx: &mut gpui::Test
         view.update(cx, |view, cx| {
             prepare_mouse(view, selected, cx);
             view.endpoints.push(other);
+            view.list_all_endpoints();
             view.poll_endpoints(cx);
             view.live.drag_request = Some("gpui-pending".into());
 

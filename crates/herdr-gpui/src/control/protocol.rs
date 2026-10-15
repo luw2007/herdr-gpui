@@ -3,6 +3,7 @@
 //! flat form; every other family sends `{"method", "caller", "op"}` with a
 //! family-specific `op`, and is answered with a family-specific `reply`.
 pub(crate) mod app;
+pub(crate) mod container;
 pub(crate) mod events;
 pub(crate) mod hosts;
 pub(crate) mod settings;
@@ -13,8 +14,8 @@ use crate::cli::control::Placement;
 use serde::{Deserialize, Serialize};
 
 /// Raised whenever a request or reply changes shape, so `status` can tell
-/// an outdated app from a refused request. 4: queried Sessions manager.
-pub(crate) const PROTOCOL_VERSION: u32 = 4;
+/// an outdated app from a refused request. 4: queried Sessions manager. 5: logical Windows (`container`).
+pub(crate) const PROTOCOL_VERSION: u32 = 5;
 
 /// Older apps and clients know only tabs, so a tab is left off the wire.
 fn is_tab(placement: &Placement) -> bool {
@@ -45,6 +46,8 @@ pub(crate) enum Request {
     App(Call<app::AppOp>),
     #[serde(rename = "window")]
     Window(Call<app::WindowOp>),
+    #[serde(rename = "container")]
+    Container(Call<container::ContainerOp>),
     #[serde(rename = "ui")]
     Ui(Call<app::UiOp>),
     #[serde(rename = "command")]
@@ -215,6 +218,9 @@ pub(crate) enum Response {
     },
     App {
         reply: app::Reply,
+    },
+    Container {
+        reply: container::Reply,
     },
     Tab {
         reply: tabs::Reply,
@@ -388,5 +394,49 @@ mod tests {
             serde_json::to_string(&Response::error(ErrorCode::Busy, "x")).unwrap(),
             r#"{"status":"error","code":"busy","message":"x"}"#
         );
+    }
+
+    #[test]
+    fn container_requests_and_replies_round_trip() {
+        use super::container::{ContainerInfo, ContainerOp, Reply, SlotInfo};
+        for op in [
+            ContainerOp::List,
+            ContainerOp::New {
+                title: Some("Build".into()),
+            },
+            ContainerOp::Focus { id: 2 },
+            ContainerOp::Attach {
+                session: "work".into(),
+                device: Some("ssh:box".into()),
+            },
+        ] {
+            let request = Request::Container(Call {
+                caller: Caller::default(),
+                op,
+            });
+            let text = serde_json::to_string(&request).unwrap();
+            assert!(text.starts_with(r#"{"method":"container""#), "{text}");
+            assert_eq!(serde_json::from_str::<Request>(&text).unwrap(), request);
+        }
+        let response = Response::Container {
+            reply: Reply::Containers {
+                containers: vec![ContainerInfo {
+                    id: 1,
+                    title: "Window 1".into(),
+                    active: true,
+                    sessions: vec![SlotInfo {
+                        device: "local".into(),
+                        session: "default".into(),
+                        selected: true,
+                        status: "online".into(),
+                    }],
+                }],
+            },
+        };
+        let text = serde_json::to_string(&response).unwrap();
+        assert_eq!(serde_json::from_str::<Response>(&text).unwrap(), response);
+        assert!(container::valid_name("work"));
+        assert!(!container::valid_name(""));
+        assert!(!container::valid_name("a\nb"));
     }
 }

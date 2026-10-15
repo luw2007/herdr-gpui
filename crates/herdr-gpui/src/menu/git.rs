@@ -92,9 +92,7 @@ impl HerdrWindow {
     /// Local, owned daemon sockets only: the same trust boundary the PR lookup
     /// uses, because both run Git against the user's own checkouts.
     fn local_git_endpoint(&self) -> bool {
-        self.selected_endpoint == 0
-            && self.live.local_daemon_peer
-            && self.live.status.is_connected()
+        self.selected_is_local() && self.live.local_daemon_peer && self.live.status.is_connected()
     }
 
     /// The checkout the chrome acts on: the focused workspace's, when it is one

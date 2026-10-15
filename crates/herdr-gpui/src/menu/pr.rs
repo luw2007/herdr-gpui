@@ -14,7 +14,7 @@ impl HerdrWindow {
     pub(crate) fn pr_origin(&self) -> Option<Origin> {
         match &self.endpoints[self.selected_endpoint].connection.target {
             herdr_client::ConnectTarget::Ssh { target, .. } => Some(Origin::Ssh(target.clone())),
-            _ if self.selected_endpoint == 0 && self.live.local_daemon_peer => Some(Origin::Local),
+            _ if self.selected_is_local() && self.live.local_daemon_peer => Some(Origin::Local),
             _ => None,
         }
     }

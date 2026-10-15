@@ -261,6 +261,11 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // An empty logical Window shows no terminal, so nothing is typed into
+        // the session still connected behind it.
+        if self.container_is_empty() && self.menu.page.is_none() {
+            return;
+        }
         // A remapped function key has its name from here on, so the pane key
         // looked up, the key sent, and the key held for its release agree.
         let named =

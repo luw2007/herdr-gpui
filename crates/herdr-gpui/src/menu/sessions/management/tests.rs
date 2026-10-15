@@ -195,6 +195,7 @@ fn a_replaced_device_cannot_receive_a_captured_deletion(cx: &mut TestAppContext)
                 },
                 true,
             ));
+            view.list_all_endpoints();
             view.sessions.devices.answers.insert(
                 "ssh:test".into(),
                 DeviceScan::Sessions(vec![herdr_client::RemoteSession {
@@ -278,6 +279,7 @@ fn confirmed_current_session_handoff_retires_only_matching_targets(cx: &mut Test
                     },
                     true,
                 ));
+                view.list_all_endpoints();
             }
             view.selected_endpoint = 1;
             let remote = ConnectTarget::Ssh {

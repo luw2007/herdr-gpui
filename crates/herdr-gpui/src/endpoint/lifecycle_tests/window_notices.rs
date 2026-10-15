@@ -32,6 +32,7 @@ fn system_notification_click_opens_its_origin_and_rejects_a_reconnect(
         view.endpoints[0].detached = true;
         remote.toasts.receive([first]);
         view.endpoints.push(remote);
+        view.list_all_endpoints();
     });
     post(&view, cx);
     assert!(cx.shown_system_notifications().is_empty());

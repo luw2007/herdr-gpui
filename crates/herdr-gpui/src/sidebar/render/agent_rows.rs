@@ -29,7 +29,7 @@ impl HerdrWindow {
     ) -> (Stateful<Div>, usize, Option<usize>) {
         let font = &self.config.sidebar;
         let theme = &self.theme;
-        let multi = self.endpoints.len() > 1;
+        let multi = self.sidebar_multi();
         let mut count = 0;
         let mut focused = None;
         for (index, agent) in self.panel_agents() {
@@ -117,7 +117,7 @@ impl HerdrWindow {
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let rows = layout_for(self.config.layout.mode);
-        let multi = self.endpoints.len() > 1;
+        let multi = self.sidebar_multi();
         let selected = index == self.selected_endpoint;
         let endpoint_id = self
             .endpoints
