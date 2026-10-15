@@ -122,6 +122,7 @@ fn a_host_already_saved_or_being_added_returns_to_the_form(cx: &mut gpui::TestAp
                 },
                 true,
             ));
+            view.list_all_endpoints();
             // The window's own list refuses the exact spelling at once.
             let again = setup::Request::new("penso@box", "Again", "").unwrap();
             assert!(matches!(

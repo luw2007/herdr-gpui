@@ -30,6 +30,7 @@ fn draw(
             );
             remote.live.snapshot = view.live.snapshot.clone();
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view
         });
         cx.observe(&view, |_, _, cx| cx.notify()).detach();

@@ -8,6 +8,10 @@ pub(crate) use shortcuts::platform_default;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Deserialize)]
 pub enum Command {
     NewWindow,
+    /// A new logical Window inside this native window.
+    NewContainer,
+    NextContainer,
+    PreviousContainer,
     Workspace,
     NewWorktree,
     /// The focused repository's "Open worktree..." dialog.
@@ -127,6 +131,21 @@ pub const COMMANDS: &[CommandInfo] = &[
         command: Command::NewWindow,
         name: "new_window",
         label: "New Window",
+    },
+    CommandInfo {
+        command: Command::NewContainer,
+        name: "new_container",
+        label: "New Logical Window",
+    },
+    CommandInfo {
+        command: Command::NextContainer,
+        name: "next_container",
+        label: "Next Logical Window",
+    },
+    CommandInfo {
+        command: Command::PreviousContainer,
+        name: "previous_container",
+        label: "Previous Logical Window",
     },
     CommandInfo {
         command: Command::Workspace,
@@ -795,6 +814,9 @@ pub fn request(command: Command, snapshot: &ClientShellSnapshot) -> Option<(Meth
             (Method::TabFocus, json!({"tab_id": target.tab_id}))
         }
         Command::NewWindow
+        | Command::NewContainer
+        | Command::NextContainer
+        | Command::PreviousContainer
         | Command::NewWorktree
         | Command::OpenWorktree
         | Command::RemoveWorktree

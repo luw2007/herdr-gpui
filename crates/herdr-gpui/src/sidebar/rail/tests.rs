@@ -32,6 +32,7 @@ fn rail_window(
                 );
                 remote.live.snapshot = Some(Arc::new(snapshot(2)));
                 view.endpoints.push(remote);
+                view.list_all_endpoints();
             }
             view.sidebar_visible = false;
             view

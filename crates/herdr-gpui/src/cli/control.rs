@@ -4,6 +4,7 @@
 //! these cover what only this client knows or draws.
 mod app;
 mod browser;
+mod container;
 mod hosts;
 mod projects;
 mod settings;
@@ -15,6 +16,7 @@ pub(crate) use super::args::Args;
 pub use crate::control::{Cursor, EventKind, FontSize, Script, Size, Sound, Switch};
 pub use app::{AppCommand, UiCommand, WindowCommand};
 pub use browser::{BrowserCommand, Placement};
+pub use container::ContainerCommand;
 pub use hosts::{CloudCommand, HostCommand, PortsCommand, PrCommand};
 pub use projects::ProjectCommand;
 pub use settings::{
@@ -46,6 +48,7 @@ pub enum ControlCommand {
     Browser(BrowserCommand),
     App(AppCommand),
     Window(WindowCommand),
+    Container(ContainerCommand),
     Ui(UiCommand),
     Tab(TabCommand),
     Code(CodeCommand),
@@ -134,6 +137,10 @@ pub const FAMILIES: &[(&str, &str)] = &[
     (
         "window",
         "List, open, focus, resize, detach, or reconnect windows",
+    ),
+    (
+        "container",
+        "List, create, focus logical Windows and attach sessions to them",
     ),
     ("ui", "Sidebar, status bar, and terminal font size"),
     ("tab", "List, focus, or close the app's own tabs"),
@@ -285,6 +292,7 @@ fn command(family: &'static str, args: &mut Args) -> Result<ControlCommand, CliE
         "skill" => ControlCommand::Skill,
         "app" => ControlCommand::App(app::app(args)?),
         "window" => ControlCommand::Window(app::window(args)?),
+        "container" => ControlCommand::Container(container::container(args)?),
         "ui" => ControlCommand::Ui(app::ui(args)?),
         "tab" => ControlCommand::Tab(tabs::tab(args)?),
         "code" => ControlCommand::Code(tabs::code(args)?),

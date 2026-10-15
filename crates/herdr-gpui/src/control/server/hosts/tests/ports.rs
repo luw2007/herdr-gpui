@@ -175,6 +175,7 @@ fn local_ports_need_no_forward_and_a_remote_forward_stops(cx: &mut TestAppContex
                 },
                 true,
             ));
+            view.list_all_endpoints();
             // The window shows the remote host, with the fixture's workspaces.
             view.selected_endpoint = 1;
             view.port_forwards

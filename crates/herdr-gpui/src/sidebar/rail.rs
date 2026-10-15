@@ -115,7 +115,7 @@ impl HerdrWindow {
         let font = &self.config.sidebar;
         let theme = &self.theme;
         let hint = Hint::new(theme);
-        let multi = self.endpoints.len() > 1;
+        let multi = self.sidebar_multi();
         let split = self.sidebar_split.unwrap_or(0.5).clamp(0.1, 0.9);
         let mut spaces = div()
             .id("rail-spaces")
@@ -134,7 +134,7 @@ impl HerdrWindow {
             .min_h_0()
             .overflow_y_scroll();
         for (endpoint_index, endpoint) in self.endpoints.iter().enumerate() {
-            if !self.device_visible(&endpoint.id) {
+            if !self.endpoint_listed(endpoint_index) {
                 continue;
             }
             let selected = endpoint_index == self.selected_endpoint;

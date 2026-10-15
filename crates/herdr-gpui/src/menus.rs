@@ -351,6 +351,12 @@ pub(crate) fn menus(layout: Layout) -> Vec<Menu> {
                     },
                 ),
                 MenuItem::action(
+                    "New Logical Window",
+                    RunCommand {
+                        command: Command::NewContainer,
+                    },
+                ),
+                MenuItem::action(
                     "Cycle Through Windows",
                     RunCommand {
                         command: Command::CycleWindows,

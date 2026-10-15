@@ -142,6 +142,9 @@ pub(super) struct Endpoint {
     /// remembering what the catalog said.
     saved: Option<ConnectTarget>,
     pub collapsed: bool,
+    /// Set on a connection that exists only for one attached session of a
+    /// logical Window; device endpoints leave it empty.
+    pub(crate) slot: Option<crate::containers::SessionRef>,
     pub collapsed_repos: HashSet<String>,
     pub live: LiveState,
     /// Each tab's last frame before `live` moved on, for Go To's preview.
@@ -167,6 +170,60 @@ pub(super) struct Endpoint {
 }
 
 impl Endpoint {
+    /// The Herdr session this connection is attached to.
+    pub(crate) fn session_ref(&self) -> crate::containers::SessionRef {
+        match &self.slot {
+            Some(slot) => slot.clone(),
+            None => crate::containers::SessionRef::new(
+                self.id.clone(),
+                crate::containers::target_session(&self.connection.target),
+            ),
+        }
+    }
+
+    /// The device this connection's session runs on.
+    /// The title of this connection's sidebar row: the device, and the session
+    /// when it is not the device's default.
+    pub(crate) fn session_title(&self) -> String {
+        let session = self.session_ref().session;
+        if session == "default" {
+            self.label.clone()
+        } else {
+            format!("{} \u{b7} {session}", self.label)
+        }
+    }
+
+    pub(crate) fn device_id(&self) -> &str {
+        self.slot.as_ref().map_or(&self.id, |slot| &slot.device)
+    }
+
+    /// Whether one of `slots` is this connection's session.
+    pub(crate) fn listed_in(&self, slots: &[crate::containers::SessionRef]) -> bool {
+        let session = self.session_ref();
+        slots.contains(&session)
+    }
+
+    /// Whether this connection talks to `target`. A local target matches by
+    /// socket on the local device's connections; a remote one by equality.
+    pub(crate) fn talks_to(&self, target: &ConnectTarget) -> bool {
+        match (target.socket_path().ok(), target.is_remote()) {
+            (Some(path), false) => {
+                self.device_id() == LOCAL && self.connection.target.socket_path().ok() == Some(path)
+            }
+            _ => self.connection.target == *target,
+        }
+    }
+
+    /// Dials again a connection that was paused or stopped, as picking its
+    /// session always did.
+    pub(crate) fn resume(&mut self) {
+        if self.detached {
+            self.detached = false;
+            self.attempts = 0;
+            self.retry_at = Instant::now();
+        }
+    }
+
     pub fn surface_requested(&self) -> bool {
         self.initial_surface
     }
@@ -213,6 +270,7 @@ impl Endpoint {
             enabled,
             saved: None,
             collapsed: false,
+            slot: None,
             collapsed_repos: HashSet::new(),
             live: LiveState::default(),
             last_seen: Default::default(),
@@ -422,55 +480,87 @@ impl HerdrWindow {
     /// the user confirmed for deletion. This retires transports without I/O on
     /// the UI thread. The caller reconnects the selected endpoint if it moved.
     pub(super) fn retarget_session_for_deletion(&mut self, target: &ConnectTarget) -> bool {
-        let mut selected_changed = false;
-        for (index, endpoint) in self.endpoints.iter_mut().enumerate() {
-            let replacement = match target {
-                ConnectTarget::Session {
-                    name,
-                    development: false,
-                } if name != "default"
-                    && index == 0
-                    && target.socket_path().ok().is_some_and(|path| {
-                        endpoint.connection.target.socket_path().ok() == Some(path)
-                    }) =>
-                {
-                    Some(ConnectTarget::Session {
-                        name: "default".into(),
-                        development: false,
-                    })
-                }
-                _ if target
-                    .remote_session()
-                    .is_some_and(|session| session != "default")
-                    && endpoint.connection.target == *target =>
-                {
-                    target.remote_host().map(|host| host.target("default"))
-                }
-                _ => None,
-            };
-            if let Some(replacement) = replacement {
-                endpoint.retarget(replacement);
-                selected_changed |= index == self.selected_endpoint;
+        let replacement_for = |endpoint: &Endpoint| match target {
+            ConnectTarget::Session {
+                name,
+                development: false,
+            } if name != "default" && endpoint.talks_to(target) => Some(ConnectTarget::Session {
+                name: "default".into(),
+                development: false,
+            }),
+            _ if target
+                .remote_session()
+                .is_some_and(|session| session != "default")
+                && endpoint.talks_to(target) =>
+            {
+                target.remote_host().map(|host| host.target("default"))
             }
+            _ => None,
+        };
+        let mut selected_changed = false;
+        for index in 0..self.endpoints.len() {
+            let Some(replacement) = replacement_for(&self.endpoints[index]) else {
+                continue;
+            };
+            let from = self.endpoints[index].session_ref();
+            let to = crate::containers::SessionRef::new(
+                from.device.clone(),
+                crate::containers::target_session(&replacement),
+            );
+            let endpoint = &mut self.endpoints[index];
+            endpoint.retarget(replacement);
+            if endpoint.slot.is_some() {
+                endpoint.slot = Some(to.clone());
+            }
+            // Every logical Window that listed the deleted session lists the
+            // default session of its device instead.
+            self.containers
+                .replace_session(&from.device, &from.session, &to.session);
+            selected_changed |= index == self.selected_endpoint;
         }
+        self.dedupe_session_endpoints();
         selected_changed
     }
 
+    /// Two connections to one session never coexist: the first one found keeps
+    /// the session.
+    fn dedupe_session_endpoints(&mut self) {
+        let mut index = self.endpoints.len();
+        while index > 1 {
+            index -= 1;
+            if self.endpoints[index].slot.is_none() {
+                continue;
+            }
+            let session = self.endpoints[index].session_ref();
+            let first = self
+                .endpoints
+                .iter()
+                .position(|e| e.session_ref() == session);
+            if first == Some(index) || first.is_none() {
+                continue;
+            }
+            // The surviving connection takes over what was on screen; the
+            // caller reconnects the selected endpoint.
+            if index == self.selected_endpoint {
+                self.selected_endpoint = first.unwrap_or(0);
+            }
+            self.endpoints.remove(index);
+            if index < self.selected_endpoint {
+                self.selected_endpoint -= 1;
+            }
+        }
+    }
+
     /// Pause every endpoint of this window that talks to `target`, the session
-    /// the user confirmed stopping. Unlike deletion the endpoint keeps its
-    /// target (the saved profile is untouched) but is detached, so the poll
-    /// loop cannot dial and thereby restart the session. Returns whether the
-    /// selected endpoint was paused; the caller resets the selection then.
+    /// the user confirmed stopping, whichever logical Window lists it. Unlike
+    /// deletion the endpoint keeps its target (the saved profile is untouched)
+    /// but is detached, so the poll loop cannot dial and thereby restart the
+    /// session. Returns whether the selected endpoint was paused; the caller
+    /// resets the selection then.
     pub(crate) fn pause_session_endpoints(&mut self, target: &ConnectTarget) -> bool {
         let mut selected_paused = false;
         for (index, endpoint) in self.endpoints.iter_mut().enumerate() {
-            let same = match (target.socket_path().ok(), target.is_remote()) {
-                (Some(path), false) => {
-                    index == 0 && endpoint.connection.target.socket_path().ok() == Some(path)
-                }
-                _ => endpoint.connection.target == *target,
-            };
-            if !same || endpoint.detached {
+            if !endpoint.talks_to(target) || endpoint.detached {
                 continue;
             }
             endpoint.stop();
@@ -520,6 +610,31 @@ impl HerdrWindow {
                     if view.pause_session_endpoints(&target) {
                         view.reset_selected(cx);
                     }
+                    cx.notify();
+                });
+            }
+        }
+    }
+
+    /// Moves the session deleted elsewhere to its device's default in every
+    /// other window, logical Windows included, so none dials the old name.
+    pub(crate) fn retarget_session_in_other_windows(
+        &mut self,
+        target: &ConnectTarget,
+        current: gpui::WindowId,
+        cx: &mut Context<Self>,
+    ) {
+        for handle in cx.windows() {
+            if handle.window_id() == current {
+                continue;
+            }
+            if let Some(handle) = handle.downcast::<HerdrWindow>() {
+                let target = target.clone();
+                let _ = handle.update(cx, move |view, _, cx| {
+                    if view.retarget_session_for_deletion(&target) {
+                        view.reconnect(cx);
+                    }
+                    view.containers_changed(cx);
                     cx.notify();
                 });
             }
@@ -591,10 +706,16 @@ impl HerdrWindow {
         if !self.switch_endpoint(id, cx) {
             return false;
         }
-        self.catalog.choose(id);
-        if let Some(error) = self.catalog.poll_write() {
-            self.local_error = Some(format!("Save host selection: {error}"));
-            cx.notify();
+        // What a user or notification navigates to is listed in the current
+        // logical Window. A session's own connection is a view choice, not the
+        // saved device selection.
+        self.list_selected_session();
+        if self.endpoints[self.selected_endpoint].slot.is_none() {
+            self.catalog.choose(id);
+            if let Some(error) = self.catalog.poll_write() {
+                self.local_error = Some(format!("Save host selection: {error}"));
+                cx.notify();
+            }
         }
         true
     }
@@ -611,96 +732,7 @@ impl HerdrWindow {
         )
     }
 
-    /// Attach this window to another named local session. The local endpoint
-    /// keeps its identity, so the session changes its target rather than adding
-    /// an endpoint for every session on the machine.
-    pub(super) fn select_local_session(&mut self, name: &str, cx: &mut Context<Self>) {
-        let target = ConnectTarget::Session {
-            name: name.to_owned(),
-            development: self.local_development(),
-        };
-        // A detached endpoint on the same target (a stopped session) is not
-        // already attached: choosing it again must connect, which starts the
-        // saved session.
-        if self.selected_endpoint == 0
-            && self.endpoints[0].connection.target == target
-            && !self.endpoints[0].detached
-        {
-            return;
-        }
-        // Retarget before selecting: the poll loop reconnects endpoint zero, so
-        // it must never still name the session it is leaving.
-        if self.endpoints[0].connection.target != target {
-            self.endpoints[0].retarget(target);
-        }
-        if self.selected_endpoint != 0 && !self.switch_endpoint(LOCAL, cx) {
-            return;
-        }
-        // This is a deliberate move off any remote selection, which must not be
-        // restored over it on the next launch.
-        self.catalog.choose(LOCAL);
-        self.reconnect(cx);
-        // After the reconnect: resetting the connection clears the error slot.
-        if let Some(error) = self.catalog.poll_write() {
-            self.local_error = Some(format!("Save host selection: {error}"));
-        }
-        cx.notify();
-    }
-
-    /// Attach this window to another session of a saved device. The device keeps
-    /// its identity, so the session changes that endpoint's target rather than
-    /// adding an endpoint for every session the host has.
-    pub(super) fn select_device_session(
-        &mut self,
-        id: &str,
-        session: &str,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(index) = self
-            .endpoints
-            .iter()
-            .position(|endpoint| endpoint.id == id && endpoint.enabled)
-        else {
-            return;
-        };
-        // Only a remote device has a session to name; the local endpoint has
-        // its own path through `select_local_session`.
-        let Some(host) = self.endpoints[index].connection.target.remote_host() else {
-            return;
-        };
-        let target = host.target(session);
-        if self.selected_endpoint == index
-            && self.endpoints[index].connection.target == target
-            && !self.endpoints[index].detached
-        {
-            return;
-        }
-        // Retarget before switching, exactly as attaching to a local session
-        // does: the poll loop reconnects this endpoint, so it must never still
-        // name the session the window is leaving.
-        let retargeted =
-            self.endpoints[index].connection.target != target || self.endpoints[index].detached;
-        if self.endpoints[index].connection.target != target {
-            self.endpoints[index].retarget(target);
-        }
-        if self.selected_endpoint != index && !self.switch_endpoint(id, cx) {
-            return;
-        }
-        self.catalog.choose(id);
-        // Only a session this device was not already on needs a new connection:
-        // choosing the device itself keeps the transport it has, the way choosing
-        // it from the picker does.
-        if retargeted {
-            self.reconnect(cx);
-        }
-        // After the reconnect: resetting the connection clears the error slot.
-        if let Some(error) = self.catalog.poll_write() {
-            self.local_error = Some(format!("Save host selection: {error}"));
-        }
-        cx.notify();
-    }
-
-    fn switch_endpoint(&mut self, id: &str, cx: &mut Context<Self>) -> bool {
+    pub(super) fn switch_endpoint(&mut self, id: &str, cx: &mut Context<Self>) -> bool {
         let Some(index) = self.endpoints.iter().position(|e| e.id == id && e.enabled) else {
             return false;
         };
@@ -731,7 +763,7 @@ impl HerdrWindow {
         }
         self.selected_endpoint = index;
         if self.device_filter.is_some() {
-            self.device_filter = Some(id.to_owned());
+            self.device_filter = Some(self.endpoints[index].device_id().to_owned());
         }
         self.reset_selected(cx);
         // The picture kept for an outage is the previous endpoint's.

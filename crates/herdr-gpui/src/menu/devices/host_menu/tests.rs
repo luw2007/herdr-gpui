@@ -26,6 +26,7 @@ fn add_host(view: &mut crate::HerdrWindow) {
         },
         true,
     ));
+    view.list_all_endpoints();
 }
 
 fn host(view: &crate::HerdrWindow) -> &HostMenu {

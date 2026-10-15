@@ -149,7 +149,11 @@ impl HerdrWindow {
         // are read through their CLI. The same machine listed twice is one host.
         let mut hosts: Vec<HostRepositories> = Vec::new();
         for (index, endpoint) in self.endpoints.iter().enumerate() {
-            if index == self.selected_endpoint || !endpoint.enabled {
+            if index == self.selected_endpoint
+                || endpoint.slot.is_some()
+                || endpoint.device_id() == self.endpoints[self.selected_endpoint].device_id()
+                || !endpoint.enabled
+            {
                 continue;
             }
             let Ok(host) = host_for(&endpoint.connection.target) else {

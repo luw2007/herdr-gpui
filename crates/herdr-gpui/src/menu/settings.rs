@@ -358,6 +358,9 @@ impl HerdrWindow {
                 | Command::NextAgent
                 | Command::AgentNumber(_) => 1,
                 Command::NewWindow
+                | Command::NewContainer
+                | Command::NextContainer
+                | Command::PreviousContainer
                 | Command::ToggleSidebar
                 | Command::OpenCode
                 | Command::ToggleStatusBar

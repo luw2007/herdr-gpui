@@ -100,7 +100,10 @@ impl HerdrWindow {
             return;
         }
         if let Some(session) = remote_session(&torn.session) {
-            self.select_device_session(&torn.endpoint, session, cx);
+            self.attach_session(
+                crate::containers::SessionRef::new(torn.endpoint.clone(), session),
+                cx,
+            );
         }
         let target = match &torn.pick {
             Pick::Herdr(tab) => NavigationTarget::Tab(tab.clone()),

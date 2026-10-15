@@ -25,6 +25,7 @@ fn add_cloud(view: &mut crate::HerdrWindow) -> String {
         },
         true,
     ));
+    view.list_all_endpoints();
     id
 }
 

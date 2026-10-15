@@ -60,6 +60,7 @@ fn select_host(view: &mut crate::HerdrWindow, host: crate::github::Auth) {
         },
         true,
     ));
+    view.list_all_endpoints();
     view.selected_endpoint = 1;
     view.menu.github_hosts.insert(HOST.into(), host);
 }

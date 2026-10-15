@@ -44,6 +44,7 @@ mod config;
 mod config_diagnostic;
 mod connection;
 mod constants;
+mod containers;
 mod contrast;
 mod control;
 mod controls;

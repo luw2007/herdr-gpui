@@ -81,7 +81,7 @@ impl HerdrWindow {
             .overflow_y_scroll();
         spaces = spaces.track_scroll(&self.sidebar_scroll[0]);
         agents = agents.track_scroll(&self.sidebar_scroll[1]);
-        let multi = self.endpoints.len() > 1;
+        let multi = self.sidebar_multi();
         let headed = multi || devices;
         let agents_panel = self.config.show_agents && !devices;
         let query = if tree_search {
@@ -107,7 +107,7 @@ impl HerdrWindow {
         let now = std::time::Instant::now();
         let mut sliding = false;
         for (endpoint_index, endpoint) in self.endpoints.iter().enumerate() {
-            if !self.device_visible(&endpoint.id)
+            if !self.endpoint_listed(endpoint_index)
                 || (devices && !self.device_listed(endpoint_index, &query))
             {
                 continue;

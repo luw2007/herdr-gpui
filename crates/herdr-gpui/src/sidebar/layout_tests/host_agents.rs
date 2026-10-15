@@ -28,6 +28,7 @@ fn priority_paints_every_hosts_agents_in_one_order(cx: &mut gpui::TestAppContext
             remote.live.snapshot = Some(Arc::new(listing));
             remote.live.status = ConnectionStatus::Connected;
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view
         });
         cx.observe(&view, |_, _, cx| cx.notify()).detach();

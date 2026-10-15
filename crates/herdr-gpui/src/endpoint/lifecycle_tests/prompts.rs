@@ -14,6 +14,7 @@ fn dialog_response_survives_initial_surface_activation(cx: &mut gpui::TestAppCon
     view.update(cx, |view, cx| {
         view.endpoints[0].detached = true;
         view.endpoints.push(endpoint);
+        view.list_all_endpoints();
         view.selected_endpoint = 1;
         view.reset_selected(cx);
         view.poll_endpoints(cx);
@@ -94,6 +95,7 @@ fn name_prompts_follow_shared_config_and_label_creations(cx: &mut gpui::TestAppC
             view.update(cx, |view, cx| {
                 view.endpoints.truncate(1);
                 view.endpoints.push(endpoint);
+                view.list_all_endpoints();
                 view.selected_endpoint = 1;
                 view.options = ConnectOptions::default();
                 view.reset_selected(cx);
@@ -143,6 +145,7 @@ fn unconfirmed_tab_close_rejects_invalid_targets_and_unready_input(cx: &mut gpui
     cx.update(|window, cx| {
         view.update(cx, |view, cx| {
             view.endpoints.push(endpoint);
+            view.list_all_endpoints();
             view.selected_endpoint = 1;
             view.reset_selected(cx);
             view.activation_deadline = None;

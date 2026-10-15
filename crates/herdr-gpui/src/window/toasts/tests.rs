@@ -56,6 +56,7 @@ fn toast_preview_actions_use_normal_state_without_a_connection(cx: &mut TestAppC
                 herdr_client::ConnectTarget::Socket("/unused-toast-preview.sock".into()),
                 false,
             ));
+            view.list_all_endpoints();
             view.selected_endpoint = 1;
         });
         window.draw(cx).clear(cx);
@@ -128,10 +129,12 @@ fn notifications_layout_dismissal_and_focus_are_nonmodal(cx: &mut TestAppContext
                 herdr_client::ConnectTarget::Socket("/unused-toast-test.sock".into()),
                 true,
             );
+            view.list_all_endpoints();
             remote
                 .toasts
                 .receive([Notice::new(notification("Remote"), Instant::now()).preview()]);
             view.endpoints.push(remote);
+            view.list_all_endpoints();
         });
     });
     for (width, height) in [(1000., 600.), (360., 240.)] {
@@ -229,6 +232,7 @@ fn notifications_honor_all_corners_and_global_card_limit(cx: &mut TestAppContext
                     .toasts
                     .receive([Notice::new(notification(id), Instant::now()).preview()]);
                 view.endpoints.push(endpoint);
+                view.list_all_endpoints();
             }
         });
         window.draw(cx).clear(cx);

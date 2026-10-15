@@ -4,6 +4,7 @@
 //! page) is parked as a [`Watch`] and checked on every tick.
 mod app;
 mod browser;
+mod container;
 mod events;
 mod hosts;
 mod projects;
@@ -233,6 +234,7 @@ fn named_window(request: &Request) -> Option<u64> {
         Request::Feedback(_) => None,
         Request::App(call) => call.caller.window,
         Request::Window(call) => call.caller.window,
+        Request::Container(call) => call.caller.window,
         Request::Ui(call) => call.caller.window,
         Request::Command(call) => call.caller.window,
         Request::Tab(call) => call.caller.window,
@@ -276,6 +278,7 @@ fn serve(incoming: socket::Incoming, state: &mut State, cx: &mut App) {
         Request::Status(caller) => incoming.respond(app::status(&caller, cx)),
         Request::App(call) => incoming.respond(app::app(call, cx)),
         Request::Window(call) => incoming.respond(app::window(call, cx)),
+        Request::Container(call) => incoming.respond(container::container(call, cx)),
         Request::Ui(call) => incoming.respond(app::ui(call, cx)),
         Request::Command(call) => incoming.respond(app::command(call, cx)),
         Request::Tab(call) => tabs::serve(call, incoming, &mut state.watches, cx),

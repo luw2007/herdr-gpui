@@ -106,6 +106,7 @@ fn custom_command_and_resize_mode_keys_send_endpoint_requests(cx: &mut gpui::Tes
             view.update(cx, |view, cx| {
                 view.endpoints.truncate(1);
                 view.endpoints.push(endpoint);
+                view.list_all_endpoints();
                 view.selected_endpoint = 1;
                 view.options = ConnectOptions::default();
                 view.reset_selected(cx);

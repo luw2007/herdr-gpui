@@ -9,6 +9,8 @@ mod backdrop;
 mod clipboard;
 mod commands;
 mod config_diagnostic;
+mod container_strip;
+mod containers;
 mod copy_mode;
 mod device_themes;
 mod double_shift;
@@ -115,6 +117,13 @@ pub(crate) struct HerdrWindow {
     pub(crate) config_watch: Option<Task<()>>,
     pub(crate) config_load_revision: u64,
     pub(crate) endpoints: Vec<endpoint::Endpoint>,
+    /// This native window's logical Windows and the sessions each lists.
+    pub(crate) containers: crate::containers::ContainerSet,
+    /// A selection restored from disk, applied once its connection is up.
+    pub(crate) container_restore_pending: bool,
+    /// Membership changed where no context was at hand to publish it.
+    pub(crate) containers_dirty: bool,
+    pub(crate) window_id: WindowId,
     pub(crate) selected_endpoint: usize,
     pub(crate) selection_epoch: u64,
     pub(crate) catalog: endpoint::Catalog,
@@ -660,6 +669,10 @@ impl HerdrWindow {
             catalog: endpoint::Catalog::new(&target),
             sessions: sessions::Sessions::default(),
             sessions_anchor: Default::default(),
+            containers: crate::containers::ContainerSet::new(crate::containers::SessionRef::new(
+                endpoint::LOCAL,
+                crate::containers::target_session(&target),
+            )),
             endpoints: vec![endpoint::Endpoint::new(
                 endpoint::LOCAL.into(),
                 "Local".into(),
@@ -758,6 +771,9 @@ impl HerdrWindow {
             collapsed_repos: Default::default(),
             sidebar_visible: true,
             sidebar_start_pending: true,
+            container_restore_pending: false,
+            containers_dirty: false,
+            window_id: window.window_handle().window_id(),
             device_filter: None,
             wheel: WheelAccumulator::default(),
             sidebar_width: None,

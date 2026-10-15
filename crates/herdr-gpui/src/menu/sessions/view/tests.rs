@@ -95,6 +95,8 @@ fn composition_navigation_cannot_choose_or_dismiss_until_committed(cx: &mut Test
             "only the post-commit Enter chooses"
         );
         // Development targets are attach-only, never a real daemon spawn.
-        assert_eq!(view.endpoints[0].connection.target, development("beta"));
+        let shown = &view.endpoints[view.selected_endpoint];
+        assert_eq!(shown.session_ref().session, "beta");
+        assert_eq!(shown.connection.target, development("beta"));
     });
 }

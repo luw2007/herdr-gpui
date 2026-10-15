@@ -147,6 +147,7 @@ fn every_focus_changing_command_fences_immediate_input_until_ack_and_surface(
             view.update(cx, |view, cx| {
                 view.endpoints.truncate(1);
                 view.endpoints.push(endpoint);
+                view.list_all_endpoints();
                 view.selected_endpoint = 1;
                 view.options = ConnectOptions::default();
                 view.reset_selected(cx);

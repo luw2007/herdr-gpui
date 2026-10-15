@@ -25,6 +25,7 @@ fn the_wheel_does_not_move_a_device_picker_that_fits(cx: &mut gpui::TestAppConte
             );
             remote.live.snapshot = view.live.snapshot.clone();
             view.endpoints.push(remote);
+            view.list_all_endpoints();
         })
     });
     cx.simulate_resize(size(px(1000.), px(900.)));
@@ -73,6 +74,7 @@ fn a_device_picker_that_overflows_scrolls_its_list(cx: &mut gpui::TestAppContext
                 );
                 remote.live.snapshot = view.live.snapshot.clone();
                 view.endpoints.push(remote);
+                view.list_all_endpoints();
             }
         })
     });

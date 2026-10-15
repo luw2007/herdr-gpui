@@ -68,6 +68,7 @@ fn teleport_is_offered_for_linked_worktrees_on_scriptable_hosts(cx: &mut gpui::T
             );
             remote.live = view.live.clone();
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view.open_workspace_menu("w4", Default::default(), window, cx);
             assert_eq!(teleport_items(view), offered);
             view.dismiss_menu(window, cx);
@@ -99,6 +100,7 @@ fn hosts_are_listed_at_once_with_none_chosen_for_the_user(cx: &mut gpui::TestApp
                 },
                 true,
             ));
+            view.list_all_endpoints();
             view.open_workspace_menu("w4", Default::default(), window, cx);
             view.activate_workspace_menu(WorkspaceMenuAction::Teleport, window, cx);
             assert_eq!(view.menu.page, Some(Page::Teleport));
@@ -151,6 +153,7 @@ fn a_progress_bar_shows_the_review_and_fills_with_the_move(cx: &mut gpui::TestAp
                 },
                 true,
             ));
+            view.list_all_endpoints();
             view.open_workspace_menu("w4", Default::default(), window, cx);
             view.activate_workspace_menu(WorkspaceMenuAction::Teleport, window, cx);
         })
@@ -215,6 +218,7 @@ fn a_teleported_worktree_offers_its_copy_and_can_be_cleared(cx: &mut gpui::TestA
                 },
                 true,
             ));
+            view.list_all_endpoints();
             // w4 is the linked worktree on `worktree/sidebar-child`.
             view.teleport_marks.add(Mark {
                 endpoint: crate::endpoint::LOCAL.into(),
@@ -304,6 +308,7 @@ fn a_teleported_copy_offers_to_go_back_where_it_came_from(cx: &mut gpui::TestApp
                 },
                 true,
             ));
+            view.list_all_endpoints();
             view.open_workspace_menu("w4", Default::default(), window, cx);
             let offered = actions(view);
             if !cfg!(any(target_os = "linux", target_os = "macos")) {

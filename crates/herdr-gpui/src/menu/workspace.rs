@@ -543,7 +543,7 @@ impl HerdrWindow {
 
     /// The collapsed set the sidebar paints for the selected endpoint.
     pub(super) fn collapsed_repos_for_selection(&self) -> &std::collections::HashSet<String> {
-        if self.selected_endpoint == 0 {
+        if self.selected_is_local() {
             &self.collapsed_repos
         } else {
             &self.endpoints[self.selected_endpoint].collapsed_repos
@@ -552,7 +552,7 @@ impl HerdrWindow {
 
     /// The collapsed set the sidebar paints for the selected endpoint.
     pub(super) fn collapsed_repos_mut(&mut self) -> &mut std::collections::HashSet<String> {
-        if self.selected_endpoint == 0 {
+        if self.selected_is_local() {
             &mut self.collapsed_repos
         } else {
             &mut self.endpoints[self.selected_endpoint].collapsed_repos
@@ -671,7 +671,7 @@ impl HerdrWindow {
             self.menu.close_check = Some(super::workspace_close::CloseCheck::start(
                 snapshot,
                 target,
-                self.selected_endpoint == 0 && self.live.local_daemon_peer,
+                self.selected_is_local() && self.live.local_daemon_peer,
                 cx,
             ));
         }

@@ -38,6 +38,7 @@ fn open(
         view.live.snapshot = Some(Arc::new(snapshot(WORKSPACES)));
         if remote {
             view.endpoints.push(endpoint("ssh:test", "Remote"));
+            view.list_all_endpoints();
         }
         view
     });

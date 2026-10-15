@@ -51,6 +51,7 @@ fn workspaces_nest_under_their_host_in_every_layout(cx: &mut gpui::TestAppContex
                 view.config.layout.mode = mode;
                 let remote = remote_endpoint(&view);
                 view.endpoints.push(remote);
+                view.list_all_endpoints();
                 view
             });
             cx.observe(&view, |_, _, cx| cx.notify()).detach();
@@ -84,6 +85,7 @@ fn nested_worktree_rows_fit_a_narrow_sidebar(cx: &mut gpui::TestAppContext) {
             snapshot.workspaces[4].branch =
                 Some("worktree/remote-child-with-a-long-readable-branch-name".into());
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view
         });
         cx.observe(&view, |_, _, cx| cx.notify()).detach();

@@ -55,6 +55,9 @@ two projects or devices share it); `--json` then reports the error code
 
 ### App and windows
 
+`window` commands act on native OS windows. `container` commands act on the
+logical Windows inside one native window; `--window ID` names the native one.
+
 | Command | What it does |
 | --- | --- |
 | `status` | Whether the app runs, its version and control protocol, windows, and hosts |
@@ -65,6 +68,10 @@ two projects or devices share it); `--json` then reports the error code
 | `window fullscreen [on\|off\|toggle]` | |
 | `window size [WIDTHxHEIGHT]` | Print or set the window's size; windows cannot be moved |
 | `window detach\|reconnect` | Detach from, or reconnect to, the selected host |
+| `container [list]` | The window's logical Windows (tmux-window-like sets of session workspaces) with IDs, their sessions, and connection status |
+| `container new [--title TITLE]` | Add an empty logical Window and show it; no daemon is started |
+| `container focus ID` | Show a logical Window |
+| `container attach SESSION [--device ID]` | Attach a session of the shown device (or of `--device`, an ID from `host list`) to the active logical Window and show it. View only: it creates, stops, and deletes nothing, so create sessions with `herdr` or the Sessions manager |
 | `ui sidebar\|statusbar [on\|off\|toggle]` | For this window and session |
 | `ui font-size +\|-\|reset\|POINTS` | The terminal font size for this session |
 | `run COMMAND` | Any app command by its `[keybindings]` name, as the palette runs it |
@@ -259,6 +266,6 @@ request is `{"method", "caller", "op"}`, where `caller` carries the pane,
 workspace, daemon socket, and window, and `op` is tagged with `"op"`. Browser
 requests keep their original flat form (`browser.open`, `browser.reload`,
 `browser.feedback`, `notes.send`). `status` reports the protocol version,
-currently 4. Requests and responses are bounded to 256 KiB, a request that
+currently 6. Requests and responses are bounded to 256 KiB, a request that
 waits says for how long (at most 600 seconds), and the app answers at most a
 few requests at a time.

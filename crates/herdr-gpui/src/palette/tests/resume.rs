@@ -114,6 +114,7 @@ fn resume_reopens_on_a_clicked_row(cx: &mut TestAppContext) {
         remote.live.snapshot = Some(Arc::new(snapshot()));
         remote.live.status = crate::state::ConnectionStatus::Connected;
         view.endpoints.push(remote);
+        view.list_all_endpoints();
         view
     });
     cx.update(|window, cx| {

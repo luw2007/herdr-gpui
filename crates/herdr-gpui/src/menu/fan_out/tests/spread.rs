@@ -21,6 +21,7 @@ fn lanes_spread_over_hosts_and_one_can_be_moved(cx: &mut gpui::TestAppContext) {
             );
             remote.live = view.live.clone();
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view.open_workspace_menu("w3", Default::default(), window, cx);
             view.activate_workspace_menu(WorkspaceMenuAction::FanOut, window, cx);
             let fan_out = view.fan_out.as_mut().unwrap();

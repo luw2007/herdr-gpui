@@ -25,6 +25,7 @@ fn window(cx: &mut TestAppContext) -> (Entity<HerdrWindow>, &mut VisualTestConte
             },
             false,
         ));
+        view.list_all_endpoints();
     });
     (view, cx)
 }
@@ -79,6 +80,7 @@ fn the_keymap_follows_the_selected_device_only_when_it_opted_in(cx: &mut TestApp
             view.keymap().chord(&key("cmd-b")),
             Some(Command::ToggleSidebar)
         );
+        view.list_all_endpoints();
         // The window's config, which other windows and reloads compare,
         // keeps the local keymap.
         assert!(view.config.keybindings.is_prefix(&key("ctrl-b")));

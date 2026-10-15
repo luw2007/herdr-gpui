@@ -74,6 +74,22 @@ Hovering a pane focuses it when the window is active and
 terminal input has keyboard focus. Held mouse buttons, modifiers, dragging,
 IME composition, menus, and terminal popups suppress hover focus.
 
+Each native window holds switchable logical Windows, like tmux windows. The
+strip under the title bar (shown once there is more than one, or while the
+current one is empty) switches them, and **New Window** in the strip, the
+**New Logical Window** command (palette, Window menu, `new_container`),
+and `next_container`/`previous_container` add or step through them; none has a
+default shortcut. Each logical Window keeps its own list of sessions in the left
+sidebar, one top-level row per Herdr session, several from one device included.
+**Create session** and **Add existing session** in the Sessions manager attach to
+the current logical Window; a session's own workspaces stay inside its row. The
+`×` on a row, and closing a logical Window, only remove the view: the session
+keeps running and Stop and Delete stay in the Sessions manager, where they
+cover every logical Window of every native window. Closing the last logical
+Window leaves an empty one. Logical Windows, their order, membership and
+selection are restored per native window from `window-containers.json` beside
+the geometry file. `herdr-gpui container ...` inspects and drives them.
+
 Normal launches restore the main windows left open at quit, including each
 window's size and screen position, using the current launch's connection options.
 Closing an individual window removes it from the saved set; closing the final

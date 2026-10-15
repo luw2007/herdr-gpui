@@ -62,6 +62,7 @@ fn inactive_endpoint_semantic_sound_reaches_worker_once(cx: &mut gpui::TestAppCo
         view.sound = sound.into();
         view.endpoints[0].detached = true;
         view.endpoints.push(remote);
+        view.list_all_endpoints();
         assert_eq!(view.selected_endpoint, 0);
     });
     for message in [

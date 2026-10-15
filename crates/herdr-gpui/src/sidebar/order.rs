@@ -16,7 +16,7 @@ impl HerdrWindow {
         self.endpoints
             .iter()
             .enumerate()
-            .filter(|(_, endpoint)| endpoint.enabled && self.device_visible(&endpoint.id))
+            .filter(|(index, endpoint)| endpoint.enabled && self.endpoint_listed(*index))
             .map(|(index, endpoint)| {
                 let live = if index == self.selected_endpoint {
                     &self.live
@@ -36,7 +36,7 @@ impl HerdrWindow {
     /// The workspace rows the sidebar shows: a folded group or host hides
     /// its rows here too.
     pub(crate) fn sidebar_workspaces(&self) -> Vec<Row<'_>> {
-        let multi = self.endpoints.len() > 1;
+        let multi = self.sidebar_multi();
         self.listed_hosts()
             .filter(|(index, _)| !(multi && self.endpoints[*index].collapsed))
             .flat_map(|(index, snapshot)| {

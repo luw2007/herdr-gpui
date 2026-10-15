@@ -66,6 +66,7 @@ impl HerdrWindow {
         let endpoint_id = endpoint.id.clone();
         let collapse_id = endpoint_id.clone();
         let select_id = endpoint_id.clone();
+        let remove_id = endpoint_id.clone();
         let menu_id = endpoint_id.clone();
         let removing = self.menu.removing_devices.contains(&endpoint.id);
         // A cloud machine has no host to read its load from.
@@ -101,6 +102,7 @@ impl HerdrWindow {
                 0.
             }
             - working_width
+            - look_remove_width(font)
             - gauges.as_ref().map_or(0., |(width, _)| width + host_gap))
         .max(0.);
         let lines = 1. + if load_line.is_some() { 1. } else { 0. };
@@ -224,7 +226,7 @@ impl HerdrWindow {
                                 div()
                                     .w(px(label_width))
                                     .truncate()
-                                    .child(label_text(&endpoint.label)),
+                                    .child(label_text(&endpoint.session_title())),
                             ),
                     )
                     .when_some(working, |row, text| {
@@ -249,6 +251,22 @@ impl HerdrWindow {
                                     .tooltip(crate::system_load::tooltip(reading, &host, theme)),
                             )
                         },
+                    )
+                    .child(
+                        div()
+                            .id(SharedString::from(format!(
+                                "{prefix}remove-slot-{endpoint_id}"
+                            )))
+                            .debug_selector(|| format!("{prefix}remove-slot-{endpoint_id}"))
+                            .flex_none()
+                            .cursor_pointer()
+                            .text_color(rgb(theme.muted))
+                            .hover(|s| s.text_color(rgb(theme.foreground)))
+                            .child(label_text("\u{d7}"))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.remove_listed(&remove_id, cx);
+                            })),
                     )
                     .child(
                         div()
@@ -284,7 +302,7 @@ impl HerdrWindow {
                 )
             })
             .on_click(cx.listener(move |this, _, window, cx| {
-                this.select_endpoint(&select_id, cx);
+                this.select_listed(&select_id, cx);
                 window.focus(&this.focus, cx);
             }))
     }
@@ -362,4 +380,9 @@ impl HerdrWindow {
         scroll.set_offset(point(offset.x, (offset.y + px(down)).min(px(0.))));
         true
     }
+}
+
+/// The room the remove-from-Window mark takes beside the status dot.
+fn look_remove_width(font: &crate::config::FontConfig) -> f32 {
+    super::metrics::glyph_width(font) + 4.
 }

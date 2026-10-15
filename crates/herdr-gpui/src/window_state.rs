@@ -5,6 +5,8 @@
 //! every display at origin (0, 0), so a position is only meaningful together
 //! with its display. Each window records its display's persistent UUID and is
 //! reopened on that display, falling back to the primary one when it is gone.
+mod containers;
+
 use crate::state_file;
 use gpui::{App, Bounds, Context, DisplayId, Global, Pixels, Window, WindowId, point, px, size};
 use serde::{Deserialize, Serialize};
@@ -107,6 +109,7 @@ pub(crate) struct WindowState {
     restored: VecDeque<Geometry>,
     live: Vec<(WindowId, Geometry)>,
     writer: Option<Writer>,
+    containers: containers::Store,
     quitting: bool,
 }
 
@@ -132,10 +135,32 @@ impl WindowState {
                 None
             }
         });
+        let containers_path =
+            crate::preferences::state_dir().map(|dir| dir.join("window-containers.json"));
+        let sets =
+            containers_path
+                .as_ref()
+                .map_or_else(Vec::new, |path| match containers::read(path) {
+                    Ok(sets) => sets,
+                    Err(error) => {
+                        tracing::warn!(%error, "Cannot restore logical windows");
+                        Vec::new()
+                    }
+                });
+        let container_writer = containers_path.and_then(|path| {
+            match containers::Writer::start("window-containers", path) {
+                Ok(writer) => Some(writer),
+                Err(error) => {
+                    tracing::warn!(%error, "Cannot start logical-window worker");
+                    None
+                }
+            }
+        });
         Self {
             restored: restored.into(),
             live: Vec::new(),
             writer,
+            containers: containers::Store::new(sets, container_writer),
             quitting: false,
         }
     }
@@ -147,9 +172,12 @@ impl WindowState {
     pub(crate) fn install(self, cx: &mut App) {
         cx.set_global(self);
         cx.on_app_quit(|cx| {
-            let writer = cx.global_mut::<Self>().shutdown();
+            let (writer, containers) = cx.global_mut::<Self>().shutdown();
             cx.background_executor().spawn(async move {
                 if let Some(writer) = writer {
+                    writer.finish();
+                }
+                if let Some(writer) = containers {
                     writer.finish();
                 }
             })
@@ -157,9 +185,9 @@ impl WindowState {
         .detach();
     }
 
-    fn shutdown(&mut self) -> Option<Writer> {
+    fn shutdown(&mut self) -> (Option<Writer>, Option<containers::Writer>) {
         self.quitting = true;
-        self.writer.take()
+        (self.writer.take(), self.containers.writer.take())
     }
 
     /// Chooses the next main window's bounds and the display they refer to.
@@ -171,6 +199,7 @@ impl WindowState {
             return (default, None);
         }
         let state = cx.global_mut::<Self>();
+        state.containers.advance();
         let geometry = state.restored.pop_front().unwrap_or_else(|| {
             if let Some((_, mut geometry)) = state.live.last().copied() {
                 geometry.x += 28.;
@@ -206,7 +235,33 @@ impl WindowState {
         (geometry.bounds(), display.map(|display| display.id()))
     }
 
+    /// The logical Windows saved for the window `placement` just chose.
+    pub(crate) fn take_containers(cx: &mut App) -> Option<crate::containers::ContainerSet> {
+        if !cx.has_global::<Self>() {
+            return None;
+        }
+        cx.global_mut::<Self>().containers.take()
+    }
+
+    /// Records a native window's logical Windows for the next launch.
+    pub(crate) fn record_containers<T: 'static>(
+        id: WindowId,
+        set: &crate::containers::ContainerSet,
+        cx: &mut Context<T>,
+    ) {
+        if !cx.has_global::<Self>() {
+            return;
+        }
+        let state = cx.global_mut::<Self>();
+        if state.quitting || !state.containers.record(id, set) {
+            return;
+        }
+        state.save();
+    }
+
     fn save(&self) {
+        let ids: Vec<WindowId> = self.live.iter().map(|(id, _)| *id).collect();
+        self.containers.save(&ids);
         if let Some(writer) = &self.writer {
             writer.save(
                 self.live
@@ -238,6 +293,7 @@ impl WindowState {
             return;
         }
         self.live.retain(|(key, _)| *key != id);
+        self.containers.forget(id);
         // Closing the final window quits the app: retain its last saved layout.
         if !self.live.is_empty() {
             self.save();
@@ -300,6 +356,7 @@ mod tests {
             restored: VecDeque::new(),
             live: Vec::new(),
             writer: Some(Writer::start("window-state", path.clone()).unwrap()),
+            containers: containers::Store::default(),
             quitting: false,
         };
         let ids = [WindowId::from(1), WindowId::from(2), WindowId::from(3)];
@@ -308,7 +365,7 @@ mod tests {
         state.update(ids[2], geometry(300.));
         state.closed(ids[0]);
         state.update(ids[1], geometry(-1100.));
-        let writer = state.shutdown().unwrap();
+        let writer = state.shutdown().0.unwrap();
         // GPUI releases windows after calling the quit observer.
         state.closed(ids[1]);
         state.closed(ids[2]);
@@ -324,12 +381,13 @@ mod tests {
             restored: VecDeque::new(),
             live: Vec::new(),
             writer: Some(Writer::start("window-state", path.clone()).unwrap()),
+            containers: containers::Store::default(),
             quitting: false,
         };
         let id = WindowId::from(1);
         state.update(id, geometry(50.));
         state.closed(id);
-        state.shutdown().unwrap().finish();
+        state.shutdown().0.unwrap().finish();
         assert_eq!(read(&path).unwrap(), vec![geometry(50.)]);
     }
 

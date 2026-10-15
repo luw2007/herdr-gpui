@@ -22,6 +22,7 @@ fn device_footer_filters_both_lists_and_keeps_settings_visible(cx: &mut gpui::Te
             );
             remote.live.snapshot = view.live.snapshot.clone();
             view.endpoints.push(remote);
+            view.list_all_endpoints();
         })
     });
     cx.simulate_resize(size(px(800.), px(600.)));

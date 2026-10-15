@@ -18,6 +18,7 @@ fn host_headers_lead_with_the_device_origin_mark(cx: &mut gpui::TestAppContext) 
         );
         remote.live.snapshot = view.live.snapshot.clone();
         view.endpoints.push(remote);
+        view.list_all_endpoints();
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
@@ -75,6 +76,7 @@ fn remote_fixture(window: &mut Window, cx: &mut Context<HerdrWindow>) -> HerdrWi
     );
     remote.live.snapshot = view.live.snapshot.clone();
     view.endpoints.push(remote);
+    view.list_all_endpoints();
     view
 }
 

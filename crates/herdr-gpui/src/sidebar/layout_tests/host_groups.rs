@@ -22,6 +22,7 @@ fn multi_host_rows_scope_duplicate_ids_and_keep_agents_when_host_collapses(
             remote_snapshot.workspaces[0].label = "remote workspace".into();
             remote_snapshot.workspaces[0].branch = Some("remote branch".into());
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view
         });
         cx.observe(&view, |_, _, cx| cx.notify()).detach();
@@ -142,6 +143,7 @@ fn duplicate_repository_parents_lead_one_group_in_every_layout_and_host(
             remote.live.snapshot = Some(Arc::new(local.clone()));
             view.live.snapshot = Some(Arc::new(local));
             view.endpoints.push(remote);
+            view.list_all_endpoints();
             view
         });
         cx.simulate_resize(size(px(800.), px(1600.)));

@@ -55,6 +55,8 @@ pub enum Error {
     PaletteProjectClone(String),
     #[error("Invalid saved window geometry or too many saved windows")]
     InvalidWindowState,
+    #[error(transparent)]
+    Container(#[from] crate::containers::ContainerError),
     #[error("Sound configuration exceeds 1 MiB")]
     SoundConfigSize,
     #[error("Unknown sidebar layout {0:?}")]

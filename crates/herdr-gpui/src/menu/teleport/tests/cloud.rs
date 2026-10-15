@@ -34,6 +34,7 @@ fn all_cloud_providers_are_sources_and_destinations_without_probing(cx: &mut gpu
                     target,
                     true,
                 ));
+                view.list_all_endpoints();
             }
             view.endpoints[0].connection.target = ConnectTarget::Local;
             view.open_workspace_menu("w4", Default::default(), window, cx);

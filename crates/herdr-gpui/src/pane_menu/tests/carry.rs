@@ -47,6 +47,7 @@ fn devices_with_the_repository_follow_this_devices_places(cx: &mut TestAppContex
         let mut offline = device("ssh:offline", "Offline", ssh("offline"), snapshot());
         offline.live.status = ConnectionStatus::Disconnected;
         view.endpoints.push(offline);
+        view.list_all_endpoints();
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));

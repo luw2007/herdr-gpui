@@ -531,6 +531,13 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         status_bar_visible: true,
         zen: Default::default(),
         device_filter: None,
+        containers: crate::containers::ContainerSet::new(crate::containers::SessionRef::new(
+            crate::endpoint::LOCAL,
+            "/unused-layout-test.sock",
+        )),
+        container_restore_pending: false,
+        containers_dirty: false,
+        window_id: window.window_handle().window_id(),
         endpoints: vec![crate::endpoint::Endpoint::new(
             crate::endpoint::LOCAL.into(),
             "Local".into(),

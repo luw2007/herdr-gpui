@@ -848,6 +848,9 @@ impl Render for HerdrWindow {
             .when(!merged && !zen, |root| {
                 root.children(self.render_worktree_banner())
             })
+            .when(self.container_strip_shown() && !zen, |root| {
+                root.child(self.render_container_strip(cx))
+            })
             .child(
                 div()
                     .debug_selector(|| "window-body".into())
@@ -870,7 +873,11 @@ impl Render for HerdrWindow {
                             .min_w_0()
                             .min_h_0()
                             .relative()
-                            .child(content)
+                            .child(if self.container_is_empty() {
+                                self.render_container_empty(cx).into_any_element()
+                            } else {
+                                content.into_any_element()
+                            })
                             .children(self.render_notices(cx))
                             .children(self.zen_status_bar(cx)),
                     ),

@@ -23,6 +23,7 @@ fn open(cx: &mut TestAppContext) -> (Entity<HerdrWindow>, &mut VisualTestContext
             },
             true,
         ));
+        view.list_all_endpoints();
         view.selected_endpoint = 1;
         view.theme = builtin("Nord");
         view

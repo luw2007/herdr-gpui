@@ -326,27 +326,25 @@ fn catalog_preserves_order_labels_and_scoped_collapse_but_retires_changed_target
     });
 }
 
-/// The sessions list retargets a device to another of its sessions without
-/// touching the catalog, which still names the session the device was saved
-/// with. Reconciliation must not read that pick as a change of device and drag
-/// the window back to the session it was previously on.
+/// Attaching another session of a device adds a connection of its own beside
+/// the device's, and catalog reconciliation keeps both.
 #[gpui::test]
-fn a_session_picked_from_the_device_list_survives_catalog_reconciliation(
-    cx: &mut gpui::TestAppContext,
-) {
+fn an_attached_session_survives_catalog_reconciliation(cx: &mut gpui::TestAppContext) {
     let (view, cx) = cx.add_window_view(crate::sidebar::layout_tests::fixture_window);
     view.update(cx, |view, cx| {
         view.reconcile_catalog(vec![host("b", true)], Vec::new(), cx);
         assert!(view.select_endpoint("ssh:b", cx));
-        view.select_device_session("ssh:b", "other", cx);
+        view.attach_session(crate::containers::SessionRef::new("ssh:b", "other"), cx);
         assert!(matches!(
             &view.endpoints[1].connection.target,
-            ConnectTarget::Ssh { session, .. } if session == "other"
+            ConnectTarget::Ssh { session, .. } if session == "default"
         ));
+        let slot = view.selected_endpoint;
+        assert!(view.endpoints[slot].slot.is_some());
         view.reconcile_catalog(vec![host("b", true)], Vec::new(), cx);
-        assert_eq!(view.selected_endpoint, 1);
+        assert_eq!(view.endpoints.len(), 3);
         assert!(matches!(
-            &view.endpoints[1].connection.target,
+            &view.endpoints[view.selected_endpoint].connection.target,
             ConnectTarget::Ssh { session, .. } if session == "other"
         ));
     });

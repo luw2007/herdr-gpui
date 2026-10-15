@@ -217,7 +217,9 @@ impl Catalog {
 
 impl HerdrWindow {
     pub(super) fn restore_selection(&mut self, cx: &mut Context<Self>) {
-        if !self.catalog.restore_pending {
+        // A restored logical Window names what to show; it wins over the
+        // device chosen last time.
+        if !self.catalog.restore_pending || self.container_restore_pending {
             return;
         }
         let Some(id) = self.catalog.desired.clone() else {
@@ -250,6 +252,7 @@ impl HerdrWindow {
         self.reconcile_devices(hosts, wsl, None, cx);
         #[cfg(not(feature = "cloud"))]
         self.reconcile_devices(hosts, wsl, cx);
+        self.list_all_endpoints();
     }
 
     /// Replace the remote endpoints with every saved device. `None` keeps the
@@ -293,15 +296,19 @@ impl HerdrWindow {
         let selected_id = selected.id.clone();
         let selected_retired = self.selected_endpoint != 0
             && !devices.iter().any(|device| {
-                device.id == selected_id
+                device.id == selected.device_id()
                     && device.enabled
-                    && !entry_changed(selected, &device.target)
+                    && (selected.slot.is_some() || !entry_changed(selected, &device.target))
             });
         if selected_retired {
             self.switch_endpoint(LOCAL, cx);
         }
-        let selected_id = self.endpoints[self.selected_endpoint].id.clone();
-        for endpoint in &self.endpoints[1..] {
+        let selected_id = if selected_retired {
+            self.endpoints[self.selected_endpoint].id.clone()
+        } else {
+            selected_id
+        };
+        for endpoint in self.endpoints[1..].iter().filter(|e| e.slot.is_none()) {
             if !devices.iter().any(|device| device.id == endpoint.id) {
                 tracing::info!(
                     category = "catalog",
@@ -314,7 +321,7 @@ impl HerdrWindow {
             if !self
                 .endpoints
                 .iter()
-                .any(|endpoint| endpoint.id == device.id)
+                .any(|endpoint| endpoint.slot.is_none() && endpoint.id == device.id)
             {
                 tracing::info!(
                     category = "catalog",
@@ -324,7 +331,10 @@ impl HerdrWindow {
                 );
             }
         }
-        let mut previous = std::mem::take(&mut self.endpoints);
+        let all = std::mem::take(&mut self.endpoints);
+        let (slots, mut previous): (Vec<_>, Vec<_>) = all
+            .into_iter()
+            .partition(|endpoint| endpoint.slot.is_some());
         let mut next = vec![previous.remove(0)];
         for device in devices {
             let mut endpoint = if let Some(index) = previous.iter().position(|e| e.id == device.id)
@@ -352,12 +362,31 @@ impl HerdrWindow {
             endpoint.saved = Some(device.target);
             next.push(endpoint);
         }
+        // A session attached from a device keeps its own connection while that
+        // device's entry is unchanged; an edited or removed entry retires it,
+        // and the logical Window's slot dials again from the new entry.
+        for mut slot in slots {
+            let device = next
+                .iter()
+                .find(|e| e.slot.is_none() && Some(&e.id) == slot.slot.as_ref().map(|s| &s.device));
+            let Some(device) = device else {
+                continue;
+            };
+            let unchanged = device.enabled == slot.enabled
+                && slot.connection.target.remote_host() == device.saved_target().remote_host();
+            if unchanged {
+                slot.label = device.label.clone();
+                next.push(slot);
+            }
+        }
         self.endpoints = next;
         self.selected_endpoint = self
             .endpoints
             .iter()
             .position(|e| e.id == selected_id)
             .unwrap_or(0);
+        self.prune_slots();
+        self.materialize_slots();
         // A tab torn off another window may belong to a host just listed.
         self.land_arrival(true, cx);
         cx.notify();
