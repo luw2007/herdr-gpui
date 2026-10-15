@@ -65,8 +65,9 @@ pub use options::ConnectOptions;
 pub use remote_host::RemoteHost;
 pub use script::{ScriptHost, ScriptLimits, run_script, run_script_command, shell_quote};
 pub use sessions::{
-    LocalSession, RemoteSession, SessionState, delete_local_session, delete_remote_session,
-    list_local_sessions, list_remote_sessions,
+    LocalSession, RemoteSession, SessionState, SessionWorkspace, delete_local_session,
+    delete_remote_session, list_local_sessions, list_remote_sessions, stop_local_session,
+    stop_remote_session,
 };
 #[cfg(unix)]
 pub use ssh::script_command;
@@ -84,5 +85,6 @@ pub use transport::Stream;
 pub use upload::{remove_uploaded_files, upload_files};
 pub use wsl::{
     WslHost, WslHosts, add_wsl_host, delete_distro_session, list_distro_sessions, list_distros,
-    load_wsl_hosts, probe_distro, remove_wsl_host, store_wsl_selection, valid_distro,
+    load_wsl_hosts, probe_distro, remove_wsl_host, stop_distro_session, store_wsl_selection,
+    valid_distro,
 };

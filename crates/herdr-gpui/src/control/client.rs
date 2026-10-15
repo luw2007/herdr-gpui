@@ -355,6 +355,7 @@ pub(crate) fn run(invocation: Invocation) -> ExitCode {
         ControlCommand::Window(command) => app::window(command, &context),
         ControlCommand::Ui(command) => app::ui(command, &context),
         ControlCommand::Run { name } => app::run_command(&name, &context),
+        ControlCommand::Sessions { query } => app::sessions(query, &context),
         ControlCommand::Commands => local::commands(),
         ControlCommand::Tab(command) => tabs::tab(command, &context),
         ControlCommand::Code(command) => tabs::code(command, &context),

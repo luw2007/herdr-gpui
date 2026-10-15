@@ -142,6 +142,9 @@ fn family(name: &str) -> &'static str {
             "herdr-gpui run COMMAND\n    Run an app command by its [keybindings] name, as the command palette\n    does, for example toggle_sidebar. See `commands`."
         }
         "commands" => "herdr-gpui commands\n    The commands `run` accepts, with their shortcuts.",
+        "sessions" => {
+            "herdr-gpui sessions [QUERY...]\n    Open the Sessions manager, optionally filtering the app's session\n    project index by project, branch, or path. The user chooses and\n    confirms actions in the manager; this does not list, stop, or delete\n    daemon sessions. QUERY is printable and at most 4096 bytes."
+        }
         "logs" => {
             "herdr-gpui logs [--lines N] [--path]\n    The app's latest log records (default 100, at most 5000), or the log file's path.\n    Runs here; Herdr UI need not run. Exits 4 when there is no log yet."
         }

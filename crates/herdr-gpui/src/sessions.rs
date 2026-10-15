@@ -67,6 +67,8 @@ pub(super) struct Sessions {
     pub(super) mutation: Option<gpui::Task<()>>,
     pub(super) mutation_error: Option<String>,
     pub(super) mutation_target: Option<ConnectTarget>,
+    /// Set while the mutation in flight is a Stop (state kept), not a Delete.
+    pub(super) mutation_stop: bool,
     pub(super) departure: Option<Departure>,
     refresh_after_scan: bool,
     pending: Option<mpsc::Receiver<Result<Vec<LocalSession>, Error>>>,

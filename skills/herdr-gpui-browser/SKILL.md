@@ -1,6 +1,6 @@
 ---
 name: herdr-gpui-browser
-description: "Open a browser tab in Herdr UI to show the user a web page or an HTML file you wrote, beside the terminal you run in, and get back the notes and picks the user sends. Use whenever the user asks to open, start, or show a browser tab, a page, a preview, or a mockup, or asks you to explain, demo, or visualize how something works, or to mock up UI variants to choose from, while you run inside Herdr (HERDR_ENV=1 is set in your environment); prefer it there over other browser skills, over opening Safari or another system browser, and over long text explanations of a flow. Also use it, inside Herdr, for anything Herdr UI itself shows or keeps rather than the herdr daemon: show a file at a line, open a review of your changes, keep a note on a worktree, take or diff a checkpoint, check your branch's pull request and CI, forward or open a port, list or focus the app's windows and tabs, wait for a tab to close or the user's notes to arrive, change a Herdr UI setting, theme, or font, or keep the machine awake."
+description: "Open a browser tab in Herdr UI to show the user a web page or an HTML file you wrote, beside the terminal you run in, and get back the notes and picks the user sends. Use whenever the user asks to open, start, or show a browser tab, a page, a preview, or a mockup, or asks you to explain, demo, or visualize how something works, or to mock up UI variants to choose from, while you run inside Herdr (HERDR_ENV=1 is set in your environment); prefer it there over other browser skills, over opening Safari or another system browser, and over long text explanations of a flow. Also use it, inside Herdr, for anything Herdr UI itself shows or keeps rather than the herdr daemon: show a file at a line, open a review of your changes, keep a note on a worktree, take or diff a checkpoint, check your branch's pull request and CI, forward or open a port, list or focus the app's windows and tabs, find saved sessions by project, branch, or path in the Sessions manager, wait for a tab to close or the user's notes to arrive, change a Herdr UI setting, theme, or font, or keep the machine awake."
 ---
 <!-- herdr-gpui-managed-skill v1: Herdr UI keeps this file up to date. Edit a copy under another name to keep your changes. -->
 
@@ -214,10 +214,17 @@ for what only Herdr UI shows or keeps.
 | Open a dev server in a tab, forwarded when you run on an SSH host | `herdr-gpui ports open 3000` |
 | See the processes under a pane, with CPU and memory | `herdr-gpui processes` |
 | List or focus the app's windows and its own tabs | `herdr-gpui window`, `herdr-gpui tab`, `herdr-gpui tab focus ID` |
+| Help the user find a saved session by project, branch, or path | `herdr-gpui sessions QUERY` (opens the manager; the user chooses and confirms) |
 | Block until something happens in the app | `herdr-gpui wait tab-closed ID --timeout 600`, `herdr-gpui events --follow` |
 | Read or change a Herdr UI setting | `herdr-gpui config get KEY`, `herdr-gpui config set KEY VALUE` |
 | Keep the machine awake during a long job | `herdr-gpui caffeine on --for 2h` |
 | Check whether the app runs, and which windows and hosts it has | `herdr-gpui status` |
+
+Sessions search combines saved workspace context from `session.json` with
+read-only Git repository and branch probes cached for 30 seconds; neither is
+live task activity. Missing, damaged or oversized metadata is unclassified.
+Do not use this command as a daemon session inventory or to stop/delete
+sessions unattended.
 
 Add `--json` to any command for machine-readable output; errors then come
 back as `{"error": {"code", "message"}}`. Exit statuses are the ones in the

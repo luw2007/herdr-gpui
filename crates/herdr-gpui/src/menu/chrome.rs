@@ -227,7 +227,9 @@ impl HerdrWindow {
         let above = room(self.menu.anchor.y - px(12. + MENU_MARGIN) - chrome);
         let below = room(viewport.height - self.menu.anchor.y - px(12. + MENU_MARGIN));
         let list = matches!(page, Page::Devices | Page::Sessions);
-        let width = if list {
+        let width = if page == Page::Sessions {
+            super::sessions::SESSIONS_WIDTH
+        } else if list {
             super::devices::MENU_WIDTH
         } else {
             180.
@@ -245,6 +247,9 @@ impl HerdrWindow {
             .absolute()
             .left(left)
             .w(px(width).min((viewport.width - px(16.)).max(px(0.))));
+        let panel = panel.when(page == Page::Sessions, |panel| {
+            panel.flex().flex_col().min_h_0()
+        });
         if above >= below {
             panel
                 .bottom(

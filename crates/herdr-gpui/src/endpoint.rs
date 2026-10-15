@@ -456,6 +456,76 @@ impl HerdrWindow {
         selected_changed
     }
 
+    /// Pause every endpoint of this window that talks to `target`, the session
+    /// the user confirmed stopping. Unlike deletion the endpoint keeps its
+    /// target (the saved profile is untouched) but is detached, so the poll
+    /// loop cannot dial and thereby restart the session. Returns whether the
+    /// selected endpoint was paused; the caller resets the selection then.
+    pub(crate) fn pause_session_endpoints(&mut self, target: &ConnectTarget) -> bool {
+        let mut selected_paused = false;
+        for (index, endpoint) in self.endpoints.iter_mut().enumerate() {
+            let same = match (target.socket_path().ok(), target.is_remote()) {
+                (Some(path), false) => {
+                    index == 0 && endpoint.connection.target.socket_path().ok() == Some(path)
+                }
+                _ => endpoint.connection.target == *target,
+            };
+            if !same || endpoint.detached {
+                continue;
+            }
+            endpoint.stop();
+            endpoint.outage = None;
+            endpoint.detached = true;
+            endpoint.live.status = ConnectionStatus::Detached;
+            if let Ok(mut state) = endpoint.connection.inbox.lock() {
+                *state = endpoint.live.clone();
+            }
+            selected_paused |= index == self.selected_endpoint;
+        }
+        selected_paused
+    }
+
+    /// Pause the session in this window and every other Herdr window of the
+    /// app, so none of them dials it again while it is being stopped. The
+    /// window with id `current` is the one mid-update (updating it again would
+    /// re-enter), so it is handled directly and skipped in the enumeration.
+    pub(crate) fn pause_session_in_all_windows(
+        &mut self,
+        target: &ConnectTarget,
+        current: gpui::WindowId,
+        cx: &mut Context<Self>,
+    ) {
+        if self.pause_session_endpoints(target) {
+            self.reset_selected(cx);
+        }
+        self.pause_session_in_other_windows(target, current, cx);
+    }
+
+    /// Pause the session in every window except `current`, which is mid-update
+    /// and handled by its caller. Deleting a session uses this alone: its own
+    /// window retargets to default instead of staying detached.
+    pub(crate) fn pause_session_in_other_windows(
+        &mut self,
+        target: &ConnectTarget,
+        current: gpui::WindowId,
+        cx: &mut Context<Self>,
+    ) {
+        for handle in cx.windows() {
+            if handle.window_id() == current {
+                continue;
+            }
+            if let Some(handle) = handle.downcast::<HerdrWindow>() {
+                let target = target.clone();
+                let _ = handle.update(cx, move |view, _, cx| {
+                    if view.pause_session_endpoints(&target) {
+                        view.reset_selected(cx);
+                    }
+                    cx.notify();
+                });
+            }
+        }
+    }
+
     pub(super) fn reconnect(&mut self, cx: &mut Context<Self>) {
         let index = self.selected_endpoint;
         if !self.endpoints[index].enabled {
@@ -549,7 +619,13 @@ impl HerdrWindow {
             name: name.to_owned(),
             development: self.local_development(),
         };
-        if self.selected_endpoint == 0 && self.endpoints[0].connection.target == target {
+        // A detached endpoint on the same target (a stopped session) is not
+        // already attached: choosing it again must connect, which starts the
+        // saved session.
+        if self.selected_endpoint == 0
+            && self.endpoints[0].connection.target == target
+            && !self.endpoints[0].detached
+        {
             return;
         }
         // Retarget before selecting: the poll loop reconnects endpoint zero, so
@@ -593,14 +669,18 @@ impl HerdrWindow {
             return;
         };
         let target = host.target(session);
-        if self.selected_endpoint == index && self.endpoints[index].connection.target == target {
+        if self.selected_endpoint == index
+            && self.endpoints[index].connection.target == target
+            && !self.endpoints[index].detached
+        {
             return;
         }
         // Retarget before switching, exactly as attaching to a local session
         // does: the poll loop reconnects this endpoint, so it must never still
         // name the session the window is leaving.
-        let retargeted = self.endpoints[index].connection.target != target;
-        if retargeted {
+        let retargeted =
+            self.endpoints[index].connection.target != target || self.endpoints[index].detached;
+        if self.endpoints[index].connection.target != target {
             self.endpoints[index].retarget(target);
         }
         if self.selected_endpoint != index && !self.switch_endpoint(id, cx) {

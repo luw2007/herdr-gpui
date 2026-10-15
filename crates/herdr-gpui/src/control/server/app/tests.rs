@@ -2,6 +2,7 @@
 use super::*;
 use crate::control::protocol::app::Switch;
 
+mod sessions;
 fn call<T>(op: T) -> Call<T> {
     Call {
         caller: Caller::default(),

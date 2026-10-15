@@ -242,6 +242,7 @@ embedded_icons! {
     "settings.svg",
     "split.svg",
     "status-bar.svg",
+    "stop.svg",
     "teleport-back.svg",
     "teleport.svg",
     "terminal.svg",

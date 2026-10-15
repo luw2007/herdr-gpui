@@ -81,6 +81,14 @@ pub enum Error {
         "Herdr refused session deletion ({0}); the session may be running, inaccessible, or unsupported by the installed CLI"
     )]
     SessionDeleteFailed(std::process::ExitStatus),
+    #[error("The default session cannot be stopped from here")]
+    DefaultSessionStop,
+    #[error("Session stop timed out; refresh the list before trying again")]
+    SessionStopTimeout,
+    #[error(
+        "Herdr could not stop the session ({0}); it may already be stopped, inaccessible, or unsupported by the installed CLI"
+    )]
+    SessionStopFailed(std::process::ExitStatus),
     #[error("remote endpoints have no local socket path")]
     NoLocalSocket,
     #[error("invalid SSH target (options, controls, and passwords are forbidden)")]
@@ -355,6 +363,7 @@ impl Error {
             }),
             Self::InvalidSession
             | Self::DefaultSession
+            | Self::DefaultSessionStop
             | Self::NoLocalSocket
             | Self::InvalidSshTarget
             | Self::InvalidWslDistro => io::ErrorKind::InvalidInput,
@@ -387,6 +396,7 @@ impl Error {
             | Self::SshTimeout
             | Self::WslTimeout
             | Self::SessionDeleteTimeout
+            | Self::SessionStopTimeout
             | Self::ForwardTimeout => io::ErrorKind::TimedOut,
             Self::Full | Self::ClipboardImageBusy => io::ErrorKind::WouldBlock,
             _ => io::ErrorKind::InvalidData,

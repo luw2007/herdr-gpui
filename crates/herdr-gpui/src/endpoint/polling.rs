@@ -247,6 +247,11 @@ impl HerdrWindow {
             changed = true;
         }
         if changed {
+            // Results arrive asynchronously and reorder the list: keep the
+            // selection on the same (device, session), never the same ordinal.
+            self.sync_session_selection();
+        }
+        if changed {
             cx.notify();
         }
     }

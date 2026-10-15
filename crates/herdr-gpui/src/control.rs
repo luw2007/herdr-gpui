@@ -29,6 +29,7 @@ use protocol::Caller;
 pub use protocol::ErrorCode;
 #[cfg(any(unix, feature = "mockup"))]
 pub(crate) use protocol::NotesTo;
+pub(crate) use protocol::app::valid_session_query;
 pub use protocol::{
     app::{FontSize, Size, Switch},
     events::{Cursor, EventKind},

@@ -169,12 +169,25 @@ switches the terminal through the existing surface handoff. While filtered,
 navigation to another device follows that device; removal or disable falls back
 to Local. The filter is window-local and starts at All Devices. The adjacent gear
 opens the existing Settings page (also available with `Cmd-,`). Beside it, the
-sessions icon lists this machine's sessions and each saved device's own, grouped
-under the device, with the device this window is on leading (also available with
-`Cmd-Shift-S`). A device's list is asked for over SSH, at most once every 30
-seconds while the popup is open; until it answers, and if it never does, the
-device still offers the session it was saved with. Choosing a session attaches
-this window to it on that device.
+sessions icon (or `Cmd-Shift-S`, or `herdr-gpui run sessions`) opens the one
+Sessions manager. It lists this machine's sessions and each saved device's own,
+grouped under the device (the device this window is on leading) and then under
+the project each session saved. The search field is focused on open and matches
+every word, case-insensitively, against the device, session name, state, and the
+project, path, branch and label of every saved workspace, so a hashed `dx wt`
+session is found by its repository or branch. **All / Running / Stopped**
+filter by state (Tab cycles them); large results are shown 100 sessions per
+page (Page Up / Page Down or **Previous / Next**), and a new search or filter
+returns to page one. Workspace paths and labels come from `session.json`;
+read-only Git probes group linked worktrees by their common repository and
+cache branch context for 30 seconds. Neither is live task activity. Missing,
+damaged or oversized context is **Unclassified**. Lists admit up to 4096
+sessions, with 256 KiB per saved file and 32 MiB encoded context per remote
+scan. Unavailable context never prevents attaching by session name. Selection
+follows the same (device, session), never a row position, as scans finish. A
+device is scanned at most once every 30 seconds while the popup is open;
+until it answers, and if it never does, it still offers the session it was
+saved with. Choosing a session attaches this window to it.
 
 Set `device_footer = "auto"` under `[sidebar]` to draw this footer only while
 there are two or more devices (or one is being added), or `"never"` to leave it
@@ -186,7 +199,8 @@ The current session has an accent highlight; status dots and delete icons stay
 aligned across rows. The **Add session…** row has no status dot.
 Session and worktree context-menu actions share right-aligned 14-pixel icons
 in 24-pixel slots. Trash buttons have a separate high-contrast hover background,
-including on highlighted session rows.
+including on highlighted session rows. A running session also has a **Stop**
+button, separate from Delete.
 
 Each section offers **Add session…**, opening a centered modal. Enter a name and choose **Create and connect**
 to start a named headless server locally, or attach through the saved device's
@@ -196,8 +210,9 @@ hyphens, excluding `.` and `..`. Names already in the cached list are refused;
 if another client creates that name meanwhile, Herdr connects to it rather than
 overwriting it. Startup failures appear in the connection status.
 
-Choose a row's **trash icon**, or select it with the arrow keys and press Delete /
-Backspace, then confirm **Delete permanently** in the centered approval modal.
+Choose a row's **trash icon**, then confirm **Delete permanently** in the
+centered approval modal. Delete and Backspace edit the search text only;
+they never open a deletion or a stop.
 Confirmation stops the named session, terminates its running processes, and
 deletes its saved state. Matching endpoints in this window move to `default`
 before the operation, including when deleting the currently displayed session.
@@ -210,6 +225,13 @@ A remote session still
 referenced by a saved device profile must have that profile removed or
 reconfigured first, so a later launch cannot silently recreate it.
 
+**Stop** terminates a running session's processes but keeps its saved state
+and never touches a Git worktree; choose the session again to start it. Every
+Herdr window of the app pauses its endpoints for that session first, so none
+automatically restarts it; saved device profiles are not rewritten. Another
+Herdr client can still start it. **Delete** removes the saved state and likewise
+never deletes a Git worktree checkout.
+
 Deletion runs `herdr session stop --json -- NAME` followed by
 `herdr session delete --json -- NAME`, locally or over noninteractive SSH.
 Local stopping has a 20-second deadline and deletion a 15-second deadline; the
@@ -218,9 +240,10 @@ An already-stopped session can still be deleted: the delete command rechecks
 running state and refuses any daemon that remains live or restarted meanwhile.
 The picker refreshes after success or
 failure, including timeouts whose result is uncertain. File, process and SSH
-work runs off the UI thread, with one deletion outstanding per window.
-Local add/delete is unavailable with explicit sockets or development catalogs;
-saved-device management is unavailable on Windows or for disabled devices.
+work runs off the UI thread, with one session change outstanding per window.
+Local add/stop/delete is unavailable with explicit sockets or development
+catalogs; SSH-device management is Unix-only and unavailable for disabled
+devices. Windows manages saved WSL distributions through their installed Herdr.
 Remote hosts need an installed Herdr supporting the session commands and
 noninteractive SSH authentication. The GUI does not install or update it.
 

@@ -12,6 +12,7 @@ use crate::{
     limits::POLL,
     sessions::{
         RemoteSession, delete_command, delete_script, parse_session_list, session_list_script,
+        stop_command, stop_script,
     },
     ssh::{self, ChildGuard, HostProbe},
     transport::Stream,
@@ -163,18 +164,30 @@ pub fn probe_distro(distro: &str, session: &str) -> Result<crate::HostProbe> {
     Err(Error::WslUnsupported)
 }
 
-/// The sessions a distribution's Herdr owns, as its own CLI lists them. Blocks:
-/// call it from a background thread.
+/// The sessions a distribution's Herdr owns, as its own CLI lists them, with each
+/// session's saved workspaces. Blocks: call it from a background thread.
 #[cfg(windows)]
 pub fn list_distro_sessions(distro: &str) -> Result<Vec<RemoteSession>> {
     validate(distro, "default")?;
-    let (_, output) = ssh::run(
+    let (_, output) = ssh::run_limited(
         &mut command(distro, &session_list_script()),
         SESSIONS_TIMEOUT,
         || false,
+        crate::sessions::MAX_OUTPUT as u64,
     )
     .map_err(wsl_error)?;
-    parse_session_list(&output).map_err(wsl_error)
+    let mut sessions = parse_session_list(&output).map_err(wsl_error)?;
+    crate::sessions::enrich_remote_sessions(&format!("wsl:{distro}"), &mut sessions, |script| {
+        ssh::run_limited(
+            &mut command(distro, script),
+            SESSIONS_TIMEOUT,
+            || false,
+            crate::sessions::MAX_OUTPUT as u64,
+        )
+        .ok()
+        .map(|(_, output)| output)
+    });
+    Ok(sessions)
 }
 
 #[cfg(not(windows))]
@@ -193,6 +206,22 @@ pub fn delete_distro_session(distro: &str, name: &str) -> Result<()> {
         command(distro, &delete_script(name)),
         Duration::from_secs(45),
     )
+}
+
+/// Stop a named session inside a distribution, keeping its saved state. Blocks:
+/// call it from a background thread.
+#[cfg(windows)]
+pub fn stop_distro_session(distro: &str, name: &str) -> Result<()> {
+    validate(distro, name)?;
+    crate::sessions::validate_stop(name)?;
+    stop_command(command(distro, &stop_script(name)), Duration::from_secs(30))
+}
+
+#[cfg(not(windows))]
+pub fn stop_distro_session(distro: &str, name: &str) -> Result<()> {
+    validate(distro, name)?;
+    crate::sessions::validate_stop(name)?;
+    Err(Error::WslUnsupported)
 }
 
 #[cfg(not(windows))]

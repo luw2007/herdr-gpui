@@ -65,6 +65,19 @@ Every command accepts:
 | `ui font-size +\|-\|reset\|POINTS` | The terminal font size for this session |
 | `run COMMAND` | Any app command by its `[keybindings]` name, as the palette runs it |
 | `commands` | The names `run` accepts (no app needed) |
+| `sessions [QUERY...]` | Open the Sessions manager with an optional saved-project-context search |
+
+`sessions` opens the same manager as the app's Sessions command, in the
+targeted window. Its query matches project, path and labels from saved
+workspaces, cached Git branches, and session and device names. Saved context
+comes from `session.json`; read-only Git probes resolve linked worktrees to
+their repository and cache the branch for 30 seconds. Neither is a live task
+activity feed. Missing, damaged or oversized metadata remains unclassified.
+Queries may contain spaces but must be printable and at most 4096 UTF-8 bytes.
+The user selects a session and confirms actions in the manager. This command
+does not duplicate daemon session list, stop, or delete commands. An open
+dialog refuses it with exit 6; an absent target never falls back to another
+window. `--json` reports that the manager opened, not a session inventory.
 
 ### The app's own tabs
 
@@ -196,6 +209,6 @@ request is `{"method", "caller", "op"}`, where `caller` carries the pane,
 workspace, daemon socket, and window, and `op` is tagged with `"op"`. Browser
 requests keep their original flat form (`browser.open`, `browser.reload`,
 `browser.feedback`, `notes.send`). `status` reports the protocol version,
-currently 2. Requests and responses are bounded to 256 KiB, a request that
+currently 4. Requests and responses are bounded to 256 KiB, a request that
 waits says for how long (at most 600 seconds), and the app answers at most a
 few requests at a time.

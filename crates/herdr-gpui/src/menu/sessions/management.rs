@@ -14,6 +14,10 @@ pub(in crate::menu) enum Edit {
         target: Target,
         input: Entity<SearchInput>,
     },
+    Stop {
+        row: Row,
+        target: Target,
+    },
     Delete {
         row: Row,
         target: Target,
@@ -36,6 +40,7 @@ impl HerdrWindow {
         Entry::Row {
             row: Row::Add(target),
             spec: Spec {
+                context: None,
                 label: "Add session…".into(),
                 detail: detail.into(),
                 online: false,
@@ -94,7 +99,7 @@ impl HerdrWindow {
 
     pub(super) fn session_delete_reason(&self, row: &Row) -> Option<&'static str> {
         if self.sessions.mutation.is_some() {
-            return Some("Wait for session deletion to finish.");
+            return Some("Wait for the current session change to finish.");
         }
         let name = match row {
             Row::Local(name) | Row::Device { session: name, .. } => name,
@@ -180,10 +185,10 @@ impl HerdrWindow {
         cx.notify();
     }
 
-    fn cancel_session_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn cancel_session_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.menu.session_edit = None;
         self.menu.error = None;
-        window.focus(&self.menu.focus, cx);
+        self.focus_session_search(window, cx);
         cx.notify();
     }
 
@@ -242,6 +247,10 @@ impl HerdrWindow {
                 self.sessions.devices.refresh();
                 self.choose_session(row, window, cx);
             }
+            Edit::Stop { row, target } => {
+                let (row, target) = (row.clone(), target.clone());
+                self.submit_session_stop(row, target, window, cx);
+            }
             Edit::Delete { row, target } => {
                 if self.management_target(row).as_ref() != Some(target) {
                     self.menu.error = Some("The device changed. Reopen the session picker.".into());
@@ -265,8 +274,12 @@ impl HerdrWindow {
                     },
                     Target::Device { host, .. } => host.target(name.clone()),
                 };
-                // Retire old inboxes before stopping the daemon, so this window
-                // cannot reconnect to and recreate the name being deleted.
+                // Retire old inboxes before stopping the daemon, so no window
+                // of this app can reconnect to and recreate the name being
+                // deleted. Other windows pause (the one mid-update is skipped);
+                // this one moves to default.
+                let current = window.window_handle().window_id();
+                self.pause_session_in_other_windows(&connection, current, cx);
                 if self.retarget_session_for_deletion(&connection) {
                     self.reconnect(cx);
                     self.menu.page = Some(Page::Sessions);
@@ -281,6 +294,7 @@ impl HerdrWindow {
                     }
                 });
                 self.sessions.mutation_error = None;
+                self.sessions.mutation_stop = false;
                 self.sessions.mutation_target = Some(connection.clone());
                 self.cancel_session_edit(window, cx);
                 let timer = cx.background_executor().clone();
@@ -356,6 +370,9 @@ impl HerdrWindow {
                     .child(input.clone())
                     .child(div().text_color(rgb(theme.subtext())).child("Creates and connects to a headless session. An existing name connects to that session."));
             }
+            Some(Edit::Stop { row, .. }) => {
+                view = self.stop_modal_body(view, row);
+            }
             Some(Edit::Delete { row, .. }) => {
                 let name = match row {
                     Row::Local(name) | Row::Device { session: name, .. } => name.as_str(),
@@ -422,7 +439,11 @@ impl HerdrWindow {
                             if matches!(self.menu.session_edit, Some(Edit::Create { .. })) {
                                 "Create and connect"
                             } else {
-                                "Delete permanently"
+                                if matches!(self.menu.session_edit, Some(Edit::Stop { .. })) {
+                                    "Stop session"
+                                } else {
+                                    "Delete permanently"
+                                }
                             },
                         )
                         .on_click(
@@ -433,6 +454,11 @@ impl HerdrWindow {
     }
 }
 
+mod stop;
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod stop_tests;
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests;

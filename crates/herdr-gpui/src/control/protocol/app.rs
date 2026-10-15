@@ -90,8 +90,16 @@ pub(crate) enum UiOp {
 pub(crate) enum CommandOp {
     /// A command by its `[keybindings]` name, as the palette runs it.
     Run { name: String },
+    /// Opens the app's Sessions manager with a project-index query.
+    Sessions { query: String },
 }
 
+/// Queries may contain spaces and paths, but stay bounded and printable.
+pub(crate) const MAX_SESSION_QUERY: usize = 4096;
+
+pub(crate) fn valid_session_query(query: &str) -> bool {
+    query.len() <= MAX_SESSION_QUERY && !query.chars().any(char::is_control)
+}
 /// What `status` reports about the running app.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Status {
@@ -132,3 +140,6 @@ pub(crate) enum Reply {
     Size { width: f32, height: f32 },
     FontSize { points: f32 },
 }
+
+#[cfg(test)]
+mod tests;

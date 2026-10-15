@@ -50,6 +50,9 @@ list_local_sessions(development: bool) -> Result<Vec<LocalSession>>
 list_remote_sessions(target: &str) -> Result<Vec<RemoteSession>>
 delete_local_session(executable: &Path, name: &str) -> Result<()>
 delete_remote_session(target: &str, name: &str) -> Result<()>
+stop_local_session(executable: &Path, name: &str) -> Result<()>      // keeps saved state, never deletes
+stop_remote_session(target: &str, name: &str) -> Result<()>
+SessionWorkspace { project, path, branch: Option, label: Option }  // workspaces: saved session.json context (may lag), refined by cached read-only git probes (project = common repo, branch = live HEAD); empty = unclassified
 ConnectOptions { surface_size: ClientSurfaceSize, cell_width_px: u32, cell_height_px: u32 }
 HostTheme { pub foreground: ClientHostColor, pub background: ClientHostColor, pub palette: [ClientHostColor; 256], pub appearance: ClientHostAppearance }
 ```
@@ -64,6 +67,20 @@ only its CLI or SSH child on failure. A
 timeout is an uncertain result: refresh rather than replay. SSH functions are
 unavailable on Windows. Creating a session is the connection/startup layer's
 responsibility, not an interactive `session attach` command.
+
+Session lists admit at most 4096 entries; a larger catalog is refused rather
+than silently truncated. Saved workspace context is read from `session.json`
+without starting a daemon: at most 256 KiB per file, 64 workspaces per session,
+and 1024 bytes per path or label. Missing, damaged, oversized or symlinked files
+leave only that session unclassified. Remote collection uses standard POSIX
+tools, with a 32 MiB encoded-context budget and a 40 MiB response cap; metadata
+outside those bounds is omitted while session names remain available.
+Read-only Git probes group ordinary linked worktrees by their common repository
+and cache branch context for 30 seconds. Each pass probes at most 256 uncached
+paths; later passes continue with the remaining paths. Local Git work has a
+five-second total deadline. SSH listing and Git enrichment each have a
+30-second deadline, and failures in enrichment retain saved context. All of
+this work belongs off the UI thread.
 
 `ClientHandle` is cloneable. Its exact methods are:
 

@@ -292,10 +292,12 @@ fn a_host_listing_is_parsed_in_the_local_order() {
             RemoteSession {
                 name: "default".into(),
                 running: true,
+                workspaces: Vec::new(),
             },
             RemoteSession {
                 name: "gami".into(),
                 running: true,
+                workspaces: Vec::new(),
             },
         ]
     );
@@ -309,6 +311,7 @@ fn a_host_that_omits_the_running_flag_lists_a_stopped_session() {
         [RemoteSession {
             name: "default".into(),
             running: false,
+            workspaces: Vec::new(),
         }]
     );
 }
@@ -325,6 +328,7 @@ fn names_this_client_cannot_attach_to_are_dropped() {
         [RemoteSession {
             name: "work".into(),
             running: true,
+            workspaces: Vec::new(),
         }]
     );
 }
@@ -377,7 +381,7 @@ impl Read for Answered {
 #[cfg(unix)]
 #[test]
 fn a_host_that_answered_is_read_without_waiting_for_the_channel_to_close() {
-    let listing = br#"{"sessions":[{"name":"default","running":true}]}"#;
+    let listing = b"{\"sessions\":[{\"name\":\"default\",\"running\":true}]}\nherdr-saved:done\n";
     let mut stream = Answered(listing.iter().copied().collect());
     let started = Instant::now();
     let output = match read_listing(&mut stream, Duration::from_secs(30), || false) {
@@ -423,24 +427,17 @@ fn a_channel_that_never_prints_a_listing_still_times_out() {
 
 #[cfg(unix)]
 #[test]
-fn a_complete_listing_ends_the_read_before_any_eof() {
+fn a_finished_script_ends_the_read_before_any_eof() {
     // The command that prints a listing leaves a process holding the SSH
-    // session open, so an answer must not be waited for until EOF: doing that
-    // reported a host answering in a second as a fifteen-second timeout.
-    assert!(listed_sessions(br#"{"sessions":[]}"#));
-    assert!(listed_sessions(
-        b"motd: welcome\n{\"sessions\":[{\"name\":\"default\",\"running\":true}]}\n"
-    ));
-    // A line that is still arriving is not an answer, so the deadline stands.
-    assert!(!listed_sessions(b"{\"sessions\":[{\"name\":\"def"));
-    assert!(!listed_sessions(b"motd: welcome\n"));
-    assert!(!listed_sessions(b""));
-}
-
-#[cfg(unix)]
-#[test]
-fn a_host_that_prints_nothing_is_a_closed_bridge() {
-    assert!(matches!(parse_session_list(b""), Err(Error::SshClosed)));
+    // session open, so the script's final marker ends the read, not an EOF.
+    assert!(listing_complete(b"{\"sessions\":[]}\nherdr-saved:done\n"));
+    assert!(listing_complete(b"motd\r\nherdr-saved:done\r\n"));
+    assert!(listing_complete(b"herdr-saved:done"));
+    // The JSON alone, a partial marker, or a marker glued to other text is not.
+    assert!(!listing_complete(br#"{"sessions":[]}"#));
+    assert!(!listing_complete(b"herdr-saved:don"));
+    assert!(!listing_complete(b"xherdr-saved:done\n"));
+    assert!(!listing_complete(b""));
 }
 
 #[cfg(unix)]
@@ -483,4 +480,183 @@ fn the_remote_listing_walks_the_shared_candidate_roots() {
         list_remote_sessions("-oProxyCommand=bad"),
         Err(Error::InvalidSshTarget)
     ));
+}
+
+#[test]
+fn stop_rejects_default_and_invalid_names_before_spawning() {
+    let missing = Path::new("/no-such-session-test-executable");
+    assert!(matches!(
+        stop_local_session(missing, "default"),
+        Err(Error::DefaultSessionStop)
+    ));
+    for name in ["", "..", "../work", "work space", "x;exit", &"a".repeat(65)] {
+        assert!(
+            matches!(
+                stop_local_session(missing, name),
+                Err(Error::InvalidSession)
+            ),
+            "{name}"
+        );
+        assert!(matches!(
+            stop_remote_session("host", name),
+            Err(Error::InvalidSession | Error::DefaultSessionStop)
+        ));
+    }
+    assert!(matches!(
+        stop_remote_session("-oProxyCommand=bad", "work"),
+        Err(Error::InvalidSshTarget)
+    ));
+    // Spawning is reached for a valid name, and its failure is an I/O error.
+    assert!(matches!(
+        stop_local_session(missing, "work"),
+        Err(Error::Io(_))
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn stop_reports_its_own_errors_and_never_the_delete_ones() {
+    use std::os::unix::process::ExitStatusExt;
+    let command = |script: &str| {
+        let mut command = std::process::Command::new("/bin/sh");
+        command.args(["-c", script]);
+        command
+    };
+    assert!(stop_command(command("exit 0"), Duration::from_secs(1)).is_ok());
+    assert!(matches!(
+        stop_command(command("exit 3"), Duration::from_secs(1)),
+        Err(Error::SessionStopFailed(status)) if status.code() == Some(3)
+    ));
+    assert!(matches!(
+        stop_command(command("exec sleep 30"), Duration::ZERO),
+        Err(Error::SessionStopTimeout)
+    ));
+    let message = Error::SessionStopFailed(std::process::ExitStatus::from_raw(256)).to_string();
+    assert!(!message.to_lowercase().contains("delet"), "{message}");
+    assert!(!Error::SessionStopTimeout.to_string().contains("delet"));
+}
+
+/// A fake `herdr` that answers `session list --json` and appends every call's
+/// arguments to `$HERDR_CALLS`, so a script's real behavior can be observed.
+#[cfg(unix)]
+fn fake_herdr(root: &Path) -> PathBuf {
+    let bin = root.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let sessions = r#"{"sessions":[{"name":"default","running":true},{"name":"session0"},{"name":"session1"},{"name":"session2"}]}"#;
+    let body = format!(
+        "#!/bin/sh\necho \"$*\" >> \"$HERDR_CALLS\"\n[ \"$1 $2\" = \"session list\" ] && printf '%s\\n' '{sessions}'\nexit 0\n"
+    );
+    crate::test_executable::write(bin.join("herdr"), body, 0o755).unwrap();
+    bin
+}
+
+#[cfg(unix)]
+fn run_script(root: &Path, bin: &Path, script: &str) -> std::process::Output {
+    std::process::Command::new("/bin/sh")
+        .args(["-c", script])
+        .env("HOME", root.join("home"))
+        .env("XDG_CONFIG_HOME", root.join("cfg"))
+        .env("HERDR_CALLS", root.join("calls"))
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .output()
+        .unwrap()
+}
+
+#[cfg(unix)]
+#[test]
+fn remote_stop_runs_only_stop_with_the_name_as_one_word() {
+    let root = socket_fixture();
+    let bin = fake_herdr(&root);
+    for name in ["work", "--json", "a.b_c-1"] {
+        let output = run_script(&root, &bin, &stop_script(name));
+        assert!(output.status.success());
+    }
+    let calls = fs::read_to_string(root.join("calls")).unwrap();
+    assert!(calls.contains("session stop --json -- work\n"), "{calls}");
+    assert!(calls.contains("session stop --json -- --json\n"), "{calls}");
+    assert!(!calls.contains("delete"), "{calls}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn remote_delete_stops_then_deletes_in_the_real_shell() {
+    let root = socket_fixture();
+    let bin = fake_herdr(&root);
+    assert!(
+        run_script(&root, &bin, &delete_script("work"))
+            .status
+            .success()
+    );
+    let calls = fs::read_to_string(root.join("calls")).unwrap();
+    let stop = calls.find("session stop --json -- work").unwrap();
+    let delete = calls.find("session delete --json -- work").unwrap();
+    assert!(stop < delete, "{calls}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn the_remote_script_collects_bounded_regular_files_through_a_symlinked_root() {
+    let root = socket_fixture();
+    let bin = fake_herdr(&root);
+    // A dotfiles-style root: the configuration directory itself is a link.
+    let real = root.join("dotfiles/herdr");
+    fs::create_dir_all(real.join("sessions/session0")).unwrap();
+    fs::create_dir_all(real.join("sessions/session1")).unwrap();
+    fs::create_dir_all(real.join("sessions/session2")).unwrap();
+    fs::create_dir_all(root.join("cfg")).unwrap();
+    std::os::unix::fs::symlink(&real, root.join("cfg/herdr")).unwrap();
+    let json = br#"{"workspaces":[{"identity_cwd":"/p/app"}]}"#;
+    // Sorts first, is larger than a snapshot may be, and must not hide the rest.
+    fs::write(
+        real.join("sessions/session0/session.json"),
+        vec![b' '; saved::SNAPSHOT_MAX + 1],
+    )
+    .unwrap();
+    fs::write(real.join("sessions/session1/session.json"), json).unwrap();
+    // A file linked from outside its session directory is never read.
+    fs::write(root.join("outside.json"), json).unwrap();
+    std::os::unix::fs::symlink(
+        root.join("outside.json"),
+        real.join("sessions/session2/session.json"),
+    )
+    .unwrap();
+    fs::write(real.join("session.json"), json).unwrap();
+    let output = run_script(&root, &bin, &session_list_script());
+    assert!(output.status.success());
+    let sessions = parse_session_list(&output.stdout).unwrap();
+    let find = |name: &str| sessions.iter().find(|s| s.name == name).unwrap();
+    assert_eq!(find("default").workspaces[0].project, "/p/app");
+    assert!(find("session0").workspaces.is_empty());
+    assert_eq!(find("session1").workspaces[0].project, "/p/app");
+    assert!(find("session2").workspaces.is_empty());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_file_at_the_largest_accepted_size_is_kept_and_one_byte_more_is_not() {
+    let root = socket_fixture();
+    let bin = fake_herdr(&root);
+    let real = root.join("cfg/herdr/sessions");
+    let pad = |size: usize| {
+        let mut text = br#"{"workspaces":[{"identity_cwd":"/p/app"}]}"#.to_vec();
+        text.resize(size, b' ');
+        text
+    };
+    fs::create_dir_all(real.join("session0")).unwrap();
+    fs::create_dir_all(real.join("session1")).unwrap();
+    fs::write(real.join("session0/session.json"), pad(saved::SNAPSHOT_MAX)).unwrap();
+    fs::write(
+        real.join("session1/session.json"),
+        pad(saved::SNAPSHOT_MAX + 1),
+    )
+    .unwrap();
+    let output = run_script(&root, &bin, &session_list_script());
+    let sessions = parse_session_list(&output.stdout).unwrap();
+    let find = |name: &str| sessions.iter().find(|s| s.name == name).unwrap();
+    assert_eq!(find("session0").workspaces.len(), 1);
+    assert!(find("session1").workspaces.is_empty());
+    fs::remove_dir_all(root).unwrap();
 }

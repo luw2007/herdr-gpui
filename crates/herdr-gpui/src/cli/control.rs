@@ -100,6 +100,9 @@ pub enum ControlCommand {
     Run {
         name: String,
     },
+    Sessions {
+        query: String,
+    },
     Commands,
     Logs {
         path: bool,
@@ -184,6 +187,10 @@ pub const FAMILIES: &[(&str, &str)] = &[
         "Run any app command by name, as the command palette does",
     ),
     ("commands", "List the commands `run` accepts"),
+    (
+        "sessions",
+        "Open the Sessions manager, optionally filtering its project index",
+    ),
     ("logs", "Print or locate the app's log"),
     ("update", "Check for an app update; never installs"),
     ("diagnostics", "Write a redacted bundle for a bug report"),
@@ -360,6 +367,15 @@ fn command(family: &'static str, args: &mut Args) -> Result<ControlCommand, CliE
         "run" => ControlCommand::Run {
             name: args.required_text("COMMAND")?,
         },
+        "sessions" => {
+            let query = args.words()?.unwrap_or_default();
+            if !crate::control::valid_session_query(&query) {
+                return Err(CliError::InvalidValue(
+                    "QUERY (printable, at most 4096 bytes)",
+                ));
+            }
+            ControlCommand::Sessions { query }
+        }
         "commands" => ControlCommand::Commands,
         "logs" => ControlCommand::Logs {
             path: args.flag("--path"),

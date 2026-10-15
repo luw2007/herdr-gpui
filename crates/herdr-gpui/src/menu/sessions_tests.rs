@@ -14,20 +14,23 @@ use herdr_client::{ConnectTarget, LocalSession, SessionState};
 // Adding a session needs SSH, which Windows does not offer.
 #[cfg(not(windows))]
 mod form_scroll;
+mod input_bounds;
+mod search;
 
 /// A session as discovery reports it. The socket comes from the same path rules
 /// the window resolves, so no test hard-codes a home directory.
-fn session(name: &str, state: SessionState) -> LocalSession {
+pub(super) fn session(name: &str, state: SessionState) -> LocalSession {
     LocalSession {
         name: name.into(),
         state,
         socket: development(name).socket_path().unwrap(),
+        workspaces: Vec::new(),
     }
 }
 
 /// A development target. The fixture stays attach-only this way: a release
 /// session target would let a test start a real daemon.
-fn development(name: &str) -> ConnectTarget {
+pub(super) fn development(name: &str) -> ConnectTarget {
     ConnectTarget::Session {
         name: name.into(),
         development: true,
@@ -52,7 +55,7 @@ fn bounds(cx: &mut VisualTestContext, selector: &'static str) -> Bounds<Pixels> 
         .unwrap_or_else(|| panic!("{selector} was not painted"))
 }
 
-fn draw(cx: &mut VisualTestContext) {
+pub(super) fn draw(cx: &mut VisualTestContext) {
     cx.update(|window, cx| full_draw(window, cx).clear(cx));
 }
 
@@ -62,7 +65,7 @@ fn click(cx: &mut VisualTestContext, selector: &'static str) {
 }
 
 /// A window attached to `current`, holding `entries`, with its list open.
-fn open_list(
+pub(super) fn open_list(
     cx: &mut TestAppContext,
     entries: Vec<LocalSession>,
     current: ConnectTarget,
@@ -124,7 +127,7 @@ fn the_footer_icon_opens_the_list_between_the_picker_and_the_settings(cx: &mut T
     let panel = bounds(cx, "menu-panel");
     let footer = bounds(cx, "device-footer");
     assert!(panel.bottom() <= footer.top(), "the list opens above it");
-    assert_eq!(panel.size.width, px(280.));
+    assert_eq!(panel.size.width, px(super::sessions::SESSIONS_WIDTH));
     assert!(
         panel.right() <= px(800.),
         "the list stays inside the window"
@@ -132,7 +135,10 @@ fn the_footer_icon_opens_the_list_between_the_picker_and_the_settings(cx: &mut T
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.menu.page, Some(Page::Sessions));
-        assert_eq!(view.menu.selected, Some(0));
+        assert!(
+            view.menu.session_edit.is_none(),
+            "opening the list attaches nothing"
+        );
     });
     assert!(cx.debug_bounds("sessions-list").is_some());
 }
@@ -154,7 +160,10 @@ fn the_configured_shortcut_opens_the_list_where_the_button_sits(cx: &mut TestApp
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.menu.page, Some(Page::Sessions));
-        assert_eq!(view.menu.selected, Some(0));
+        assert!(
+            view.menu.session_edit.is_none(),
+            "opening by shortcut attaches nothing"
+        );
     });
     // The shortcut anchors where the footer button painted, not at the corner a
     // window that had never drawn it would leave the cell at.
@@ -164,7 +173,7 @@ fn the_configured_shortcut_opens_the_list_where_the_button_sits(cx: &mut TestApp
         panel.bottom() <= footer.top(),
         "the list opens above the footer it belongs to"
     );
-    assert_eq!(panel.size.width, px(280.));
+    assert_eq!(panel.size.width, px(super::sessions::SESSIONS_WIDTH));
     assert!(cx.debug_bounds("sessions-list").is_some());
 }
 
@@ -176,6 +185,7 @@ fn reported(sessions: &[(&str, bool)]) -> crate::sessions::DeviceScan {
             .map(|(name, running)| herdr_client::RemoteSession {
                 name: (*name).into(),
                 running: *running,
+                workspaces: Vec::new(),
             })
             .collect(),
     )

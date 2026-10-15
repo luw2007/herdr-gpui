@@ -3,7 +3,7 @@
 //! owns its own named sessions, listed and deleted through its own Herdr CLI.
 use crate::{
     ConnectTarget, RemoteSession, Result, delete_distro_session, delete_remote_session,
-    list_distro_sessions, list_remote_sessions,
+    list_distro_sessions, list_remote_sessions, stop_distro_session, stop_remote_session,
 };
 
 /// Where a remote endpoint's daemon runs, without the session it attaches to.
@@ -46,6 +46,15 @@ impl RemoteHost {
         match self {
             Self::Ssh(target) => delete_remote_session(target, name),
             Self::Wsl(distro) => delete_distro_session(distro, name),
+        }
+    }
+
+    /// Stop a named session, keeping its saved state so it can be started
+    /// again. Never deletes. Blocks: call it from a background thread.
+    pub fn stop_session(&self, name: &str) -> Result<()> {
+        match self {
+            Self::Ssh(target) => stop_remote_session(target, name),
+            Self::Wsl(distro) => stop_distro_session(distro, name),
         }
     }
 }

@@ -368,6 +368,29 @@ fn run_with_stderr(
     timeout: Duration,
     cancelled: impl Fn() -> bool,
 ) -> Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)> {
+    run_capped(command, timeout, cancelled, PROBE_OUTPUT_LIMIT)
+}
+
+/// [`run`] for a caller whose answer is legitimately larger than a probe's,
+/// such as a session listing carrying saved workspace snapshots.
+#[cfg(windows)]
+pub(crate) fn run_limited(
+    command: &mut Command,
+    timeout: Duration,
+    cancelled: impl Fn() -> bool,
+    limit: u64,
+) -> Result<(std::process::ExitStatus, Vec<u8>)> {
+    command.stderr(Stdio::null());
+    let (status, output, _) = run_capped(command, timeout, cancelled, limit)?;
+    Ok((status, output))
+}
+
+fn run_capped(
+    command: &mut Command,
+    timeout: Duration,
+    cancelled: impl Fn() -> bool,
+    limit: u64,
+) -> Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)> {
     let mut child = ChildGuard(
         command
             .stdin(Stdio::null())
@@ -385,7 +408,7 @@ fn run_with_stderr(
         .spawn(move || {
             let mut output = Vec::new();
             stdout
-                .take(PROBE_OUTPUT_LIMIT + 1)
+                .take(limit + 1)
                 .read_to_end(&mut output)
                 .map(|_| output)
         })?;
@@ -403,7 +426,7 @@ fn run_with_stderr(
         std::thread::sleep(Duration::from_millis(25));
     };
     let output = reader.join().map_err(|_| Error::SshClosed)??;
-    if output.len() as u64 > PROBE_OUTPUT_LIMIT {
+    if output.len() as u64 > limit {
         return Err(Error::SshOutputLimit);
     }
     // The pipe closes once the child exits, so this waits only for the drain.

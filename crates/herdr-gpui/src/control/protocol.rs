@@ -13,8 +13,8 @@ use crate::cli::control::Placement;
 use serde::{Deserialize, Serialize};
 
 /// Raised whenever a request or reply changes shape, so `status` can tell
-/// an outdated app from a refused request. 3: `browser.open` placement.
-pub(crate) const PROTOCOL_VERSION: u32 = 3;
+/// an outdated app from a refused request. 4: queried Sessions manager.
+pub(crate) const PROTOCOL_VERSION: u32 = 4;
 
 /// Older apps and clients know only tabs, so a tab is left off the wire.
 fn is_tab(placement: &Placement) -> bool {

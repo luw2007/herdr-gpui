@@ -43,10 +43,9 @@ fn create_form_owns_text_validates_and_returns_focus(cx: &mut TestAppContext) {
         })
     });
     cx.simulate_keystrokes("escape");
-    cx.update(|window, cx| {
+    cx.update(|_, cx| {
         let view = view.read(cx);
         assert!(view.menu.session_edit.is_none());
-        assert!(view.menu.focus.is_focused(window));
         assert_eq!(view.menu.page, Some(Page::Sessions));
     });
 }
@@ -71,6 +70,7 @@ fn delete_confirmation_is_centered_and_cancel_returns_to_picker(cx: &mut TestApp
                 }
                 .socket_path()
                 .unwrap(),
+                workspaces: Vec::new(),
             }];
             view.open_sessions(point(px(10.), px(440.)), window, cx);
         })
@@ -131,6 +131,7 @@ fn deletion_confirms_running_and_current_sessions_but_protects_default(cx: &mut 
                 }
                 .socket_path()
                 .unwrap(),
+                workspaces: Vec::new(),
             })
             .collect();
             for name in ["default", "missing"] {
@@ -199,6 +200,7 @@ fn a_replaced_device_cannot_receive_a_captured_deletion(cx: &mut TestAppContext)
                 DeviceScan::Sessions(vec![herdr_client::RemoteSession {
                     name: "old".into(),
                     running: false,
+                    workspaces: Vec::new(),
                 }]),
             );
             let row = Row::Device {

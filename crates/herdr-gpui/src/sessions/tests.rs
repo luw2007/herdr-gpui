@@ -7,6 +7,7 @@ fn session(name: &str, state: SessionState) -> LocalSession {
         name: name.into(),
         state,
         socket: PathBuf::from(format!("/config/herdr/sessions/{name}/herdr-client.sock")),
+        workspaces: Vec::new(),
     }
 }
 
@@ -202,10 +203,12 @@ fn remote_departure_keeps_other_rows_and_refresh_keeps_the_updated_catalog() {
                 RemoteSession {
                     name: "old".into(),
                     running: false,
+                    workspaces: Vec::new(),
                 },
                 RemoteSession {
                     name: "keep".into(),
                     running: true,
+                    workspaces: Vec::new(),
                 },
             ]),
         );
@@ -280,6 +283,7 @@ fn a_closed_popup_never_probes_a_device_but_still_applies_a_finished_pass() {
         DeviceScan::Sessions(vec![RemoteSession {
             name: "agents".into(),
             running: true,
+            workspaces: Vec::new(),
         }]),
     )])
     .unwrap();
@@ -369,6 +373,7 @@ fn a_worker_that_dies_fails_only_the_devices_it_was_asking() {
         DeviceScan::Sessions(vec![RemoteSession {
             name: "agents".into(),
             running: true,
+            workspaces: Vec::new(),
         }]),
     );
     let (tx, rx) = mpsc::sync_channel::<Vec<(String, RemoteHost, DeviceScan)>>(1);
@@ -401,6 +406,7 @@ fn a_device_whose_host_changed_is_asked_again_at_once() {
         DeviceScan::Sessions(vec![RemoteSession {
             name: "agents".into(),
             running: true,
+            workspaces: Vec::new(),
         }]),
     );
     // The same endpoint id now points at another host, inside the interval.
@@ -434,6 +440,7 @@ fn an_answer_from_a_host_the_device_no_longer_points_at_is_dropped() {
         DeviceScan::Sessions(vec![RemoteSession {
             name: "agents".into(),
             running: true,
+            workspaces: Vec::new(),
         }]),
     )])
     .unwrap();

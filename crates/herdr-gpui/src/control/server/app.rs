@@ -272,7 +272,21 @@ pub(super) fn ui(call: Call<UiOp>, cx: &mut App) -> Response {
 }
 
 pub(super) fn command(call: Call<CommandOp>, cx: &mut App) -> Response {
-    let CommandOp::Run { name } = call.op;
+    let name = match call.op {
+        CommandOp::Run { name } => name,
+        CommandOp::Sessions { query } => {
+            if !crate::control::protocol::app::valid_session_query(&query) {
+                return Response::error(
+                    ErrorCode::InvalidRequest,
+                    "Sessions query must be printable and at most 4096 bytes",
+                );
+            }
+            return in_free_window(&call.caller, cx, |view, window, cx| {
+                view.open_sessions_with_query(&query, window, cx);
+                Response::done("Opened Sessions; choose a session in the manager")
+            });
+        }
+    };
     let Some(info) = COMMANDS.iter().find(|info| info.name == name) else {
         return super::not_found(format!("No command is named {name}"));
     };
