@@ -139,7 +139,7 @@ impl HerdrWindow {
     }
 
     /// Record `row` as what the selection follows.
-    pub(super) fn pin_session(&mut self, row: Option<Row>) {
+    pub(in crate::menu) fn pin_session(&mut self, row: Option<Row>) {
         if let Some(view) = &mut self.menu.sessions_view {
             view.pinned = row;
         }

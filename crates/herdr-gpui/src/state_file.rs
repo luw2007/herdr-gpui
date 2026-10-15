@@ -56,6 +56,20 @@ pub(crate) struct Writer<T> {
 
 impl<T: Serialize + Send + 'static> Writer<T> {
     pub(crate) fn start(name: &str, path: PathBuf) -> io::Result<Self> {
+        Self::start_preserving(name, path, None)
+    }
+
+    /// Like [`Writer::start`], but a file already at `path` is first renamed to
+    /// `preserve`, replacing any earlier file there, just before the first
+    /// value is written. It is for a file that could not be read: the next save
+    /// would otherwise destroy what a person might still repair. While the
+    /// rename fails nothing is written; the next value tries again. A file that
+    /// is no longer there needs no rename.
+    pub(crate) fn start_preserving(
+        name: &str,
+        path: PathBuf,
+        mut preserve: Option<PathBuf>,
+    ) -> io::Result<Self> {
         let pending = Arc::new(Mutex::new(None::<T>));
         let mailbox = pending.clone();
         let (wake, receiver) = mpsc::sync_channel(1);
@@ -63,9 +77,18 @@ impl<T: Serialize + Send + 'static> Writer<T> {
         let worker = thread::Builder::new().name(name.into()).spawn(move || {
             for () in receiver {
                 let snapshot = mailbox.lock().ok().and_then(|mut pending| pending.take());
-                if let Some(snapshot) = snapshot
-                    && let Err(error) = write(&path, &snapshot)
-                {
+                let Some(snapshot) = snapshot else { continue };
+                if let Some(backup) = &preserve {
+                    match fs::rename(&path, backup) {
+                        Ok(()) => preserve = None,
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => preserve = None,
+                        Err(error) => {
+                            tracing::warn!(%error, file = label, "Cannot keep the unreadable state file; not saving");
+                            continue;
+                        }
+                    }
+                }
+                if let Err(error) = write(&path, &snapshot) {
                     tracing::warn!(%error, file = label, "Cannot save state");
                 }
             }

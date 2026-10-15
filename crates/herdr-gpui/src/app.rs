@@ -350,6 +350,12 @@ pub(crate) fn run() -> std::process::ExitCode {
     } else {
         crate::dispatch::History::default()
     };
+    // Nor with the user's projects, which they would overwrite.
+    let projects = if mode == LaunchMode::Normal {
+        crate::projects::Projects::load()
+    } else {
+        crate::projects::Projects::default()
+    };
     gpui_platform::application()
         .with_assets(icons::Icons)
         .run(move |cx| {
@@ -362,6 +368,7 @@ pub(crate) fn run() -> std::process::ExitCode {
             worktree_notes.install(cx);
             palette_frecency.install(cx);
             dispatch_history.install(cx);
+            projects.install(cx);
             agent_skill.install_global(cx);
             keychain_grants.install(cx);
             // Only the user's own app answers agents; native test modes stay private.

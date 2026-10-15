@@ -5,6 +5,7 @@
 mod app;
 mod browser;
 mod hosts;
+mod projects;
 mod settings;
 mod tabs;
 mod work;
@@ -15,6 +16,7 @@ pub use crate::control::{Cursor, EventKind, FontSize, Script, Size, Sound, Switc
 pub use app::{AppCommand, UiCommand, WindowCommand};
 pub use browser::{BrowserCommand, Placement};
 pub use hosts::{CloudCommand, HostCommand, PortsCommand, PrCommand};
+pub use projects::ProjectCommand;
 pub use settings::{
     CaffeineCommand, ConfigCommand, IntegrationsCommand, KeybindsCommand, SoundCommand,
     ThemeCommand, UpdateCommand,
@@ -103,6 +105,7 @@ pub enum ControlCommand {
     Sessions {
         query: String,
     },
+    Project(ProjectCommand),
     Commands,
     Logs {
         path: bool,
@@ -190,6 +193,10 @@ pub const FAMILIES: &[(&str, &str)] = &[
     (
         "sessions",
         "Open the Sessions manager, optionally filtering its project index",
+    ),
+    (
+        "project",
+        "Projects, the logical folders that span devices: list, create, bind, assign",
     ),
     ("logs", "Print or locate the app's log"),
     ("update", "Check for an app update; never installs"),
@@ -393,6 +400,7 @@ fn command(family: &'static str, args: &mut Args) -> Result<ControlCommand, CliE
                 output: args.required("PATH")?.into(),
             }
         }
+        "project" => ControlCommand::Project(projects::project(args)?),
         "integrations" => ControlCommand::Integrations(settings::integrations(args)?),
         _ => return Err(CliError::UnknownOption(family.into())),
     })

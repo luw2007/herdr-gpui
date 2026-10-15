@@ -62,6 +62,7 @@ fn workspace(path: &Path) -> SessionWorkspace {
         path,
         branch: Some("saved".into()),
         label: None,
+        repo: None,
     }
 }
 
@@ -118,6 +119,7 @@ fn a_saved_worktree_group_is_not_replaced_and_relative_paths_are_never_probed() 
         path: "/saved/repo-wt".into(),
         branch: None,
         label: None,
+        repo: None,
     }];
     let mut relative = vec![workspace(Path::new("relative/path"))];
     let seen = std::cell::RefCell::new(Vec::new());
@@ -132,6 +134,7 @@ fn a_saved_worktree_group_is_not_replaced_and_relative_paths_are_never_probed() 
                     let info = GitInfo {
                         project: Some("/other".into()),
                         branch: Some("live".into()),
+                        repo: None,
                     };
                     (path.clone(), Some(info))
                 })
@@ -157,6 +160,7 @@ fn a_failed_probe_overwrites_nothing_and_a_batch_is_resumed_by_the_next_refresh(
         let info = GitInfo {
             project: Some("/repo".into()),
             branch: Some("b".into()),
+            repo: None,
         };
         (path.clone(), Some(info))
     };
@@ -189,6 +193,7 @@ fn the_cache_is_per_host_scope() {
                     Some(GitInfo {
                         project: Some("/a".into()),
                         branch: None,
+                        repo: None,
                     }),
                 )
             })
@@ -242,4 +247,158 @@ fn a_remote_that_cannot_run_the_probe_changes_nothing() {
     let before = list.clone();
     enrich_remote("test:remote-down", &mut [&mut list], |_| None);
     assert_eq!(list, before);
+}
+
+fn encoded(text: &str) -> String {
+    STANDARD.encode(text)
+}
+
+#[test]
+fn remote_records_with_three_or_four_fields_are_both_understood() {
+    let paths = vec!["/a".to_owned(), "/b".to_owned(), "/c".to_owned()];
+    let common = encoded("/a/.git");
+    let output = format!(
+        "{RECORD}1:{common}:{}\n{RECORD}2:{common}:{}:{}\n{RECORD}3:{common}:{}:{}\n{}\n",
+        encoded("main"),
+        encoded("main"),
+        encoded("https://user:secret@GitHub.com/O/R.git"),
+        encoded("main"),
+        encoded(""),
+        super::super::saved::DONE
+    );
+    let found = parse_remote(&paths, output.as_bytes());
+    assert_eq!(found["/a"].as_ref().unwrap().repo, None);
+    let repo = found["/b"].as_ref().unwrap().repo.as_ref().unwrap();
+    assert_eq!(repo.as_str(), "github.com/o/r");
+    assert_eq!(found["/c"].as_ref().unwrap().repo, None);
+    assert!(!format!("{found:?}").contains("secret"));
+}
+
+#[test]
+fn an_unusable_or_oversized_remote_field_leaves_the_record_otherwise_intact() {
+    let paths = vec!["/a".to_owned(), "/b".to_owned()];
+    let common = encoded("/a/.git");
+    let output = format!(
+        "{RECORD}1:{common}:{}:{}\n{RECORD}2:{common}:{}:{}\n{}\n",
+        encoded("main"),
+        encoded("/srv/git/local.git"),
+        encoded("main"),
+        "A".repeat(URL_ENCODED_MAX + 4),
+        super::super::saved::DONE
+    );
+    let found = parse_remote(&paths, output.as_bytes());
+    for path in ["/a", "/b"] {
+        let info = found[path].as_ref().unwrap();
+        assert_eq!(info.repo, None);
+        assert_eq!(info.branch.as_deref(), Some("main"));
+    }
+}
+
+#[test]
+fn enrich_carries_the_probed_repo_onto_the_workspace() {
+    let mut list = vec![workspace(Path::new("/repo-cache/p"))];
+    let probe = |repo: Option<&str>| {
+        let repo = repo.and_then(RepoKey::from_remote_url);
+        move |paths: &[String]| -> Found {
+            paths
+                .iter()
+                .map(|path| {
+                    let info = GitInfo {
+                        project: None,
+                        branch: None,
+                        repo: repo.clone(),
+                    };
+                    (path.clone(), Some(info))
+                })
+                .collect()
+        }
+    };
+    enrich(
+        "test:repo-a",
+        &mut [&mut list],
+        probe(Some("git@github.com:o/r.git")),
+    );
+    assert_eq!(
+        list[0].repo.as_ref().map(RepoKey::as_str),
+        Some("github.com/o/r")
+    );
+}
+
+#[test]
+fn the_local_probe_reads_origin_then_upstream_and_never_keeps_credentials() {
+    let (root, main, linked) = repo();
+    let paths: Vec<String> = [&main, &linked]
+        .iter()
+        .map(|p| p.to_str().unwrap().to_owned())
+        .collect();
+    let none = probe_local(&paths);
+    assert_eq!(none[&paths[0]].as_ref().unwrap().repo, None);
+
+    run(
+        &main,
+        &["remote", "add", "upstream", "git@gitlab.com:Up/Stream.git"],
+    );
+    let upstream = probe_local(&paths);
+    assert_eq!(
+        upstream[&paths[0]]
+            .as_ref()
+            .unwrap()
+            .repo
+            .as_ref()
+            .unwrap()
+            .as_str(),
+        "gitlab.com/up/stream"
+    );
+
+    run(
+        &main,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://user:secret@github.com/o/r.git",
+        ],
+    );
+    let found = probe_local(&paths);
+    for path in &paths {
+        let info = found[path].as_ref().unwrap();
+        assert_eq!(info.repo.as_ref().unwrap().as_str(), "github.com/o/r");
+        assert!(!format!("{info:?}").contains("secret"));
+    }
+    let mut list = vec![workspace(&linked)];
+    enrich("test:real-remote", &mut [&mut list], probe_local);
+    assert_eq!(list[0].repo.as_ref().unwrap().as_str(), "github.com/o/r");
+    assert!(!format!("{list:?}").contains("secret"));
+
+    // A local-path remote is not a repository identity; with `upstream` gone
+    // nothing else names one.
+    run(&main, &["remote", "remove", "upstream"]);
+    run(&main, &["remote", "set-url", "origin", "/srv/git/r.git"]);
+    assert_eq!(probe_local(&paths)[&paths[0]].as_ref().unwrap().repo, None);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn the_remote_script_reports_the_remote_without_leaking_the_raw_url() {
+    let (root, main, _linked) = repo();
+    run(
+        &main,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://tok:secret@github.com:8443/o/r.git",
+        ],
+    );
+    let paths = vec![main.to_str().unwrap().to_owned()];
+    let output = Command::new("/bin/sh")
+        .args(["-c", &remote_script(&paths)])
+        .output()
+        .unwrap();
+    let found = parse_remote(&paths, &output.stdout);
+    let info = found[&paths[0]].as_ref().unwrap();
+    assert_eq!(info.repo.as_ref().unwrap().as_str(), "github.com/o/r");
+    assert!(!format!("{found:?}").contains("secret"));
+    fs::remove_dir_all(root).unwrap();
 }

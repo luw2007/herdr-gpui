@@ -7,6 +7,7 @@ mod events;
 mod help;
 mod hosts;
 mod local;
+mod projects;
 mod settings;
 mod tabs;
 mod work;
@@ -232,7 +233,7 @@ pub(crate) fn status(error: &crate::Error) -> u8 {
             ErrorCode::Busy | ErrorCode::WindowBusy | ErrorCode::TabLimit => exit::BUSY,
             ErrorCode::Timeout => exit::TIMEOUT,
             ErrorCode::Unsupported => exit::UNSUPPORTED,
-            ErrorCode::InvalidRequest | ErrorCode::Failed => exit::REFUSED,
+            ErrorCode::InvalidRequest | ErrorCode::Failed | ErrorCode::Ambiguous => exit::REFUSED,
         },
         _ => exit::REFUSED,
     }
@@ -240,6 +241,15 @@ pub(crate) fn status(error: &crate::Error) -> u8 {
 
 /// The error's code as JSON names it.
 fn code(error: &crate::Error) -> &'static str {
+    if matches!(
+        error,
+        crate::Error::ControlRejected {
+            code: ErrorCode::Ambiguous,
+            ..
+        }
+    ) {
+        return "ambiguous";
+    }
     match status(error) {
         exit::USAGE => "usage",
         exit::NOT_RUNNING => "not_running",
@@ -356,6 +366,7 @@ pub(crate) fn run(invocation: Invocation) -> ExitCode {
         ControlCommand::Ui(command) => app::ui(command, &context),
         ControlCommand::Run { name } => app::run_command(&name, &context),
         ControlCommand::Sessions { query } => app::sessions(query, &context),
+        ControlCommand::Project(command) => projects::run(command, &context),
         ControlCommand::Commands => local::commands(),
         ControlCommand::Tab(command) => tabs::tab(command, &context),
         ControlCommand::Code(command) => tabs::code(command, &context),

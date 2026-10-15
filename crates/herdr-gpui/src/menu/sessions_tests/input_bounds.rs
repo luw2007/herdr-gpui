@@ -12,6 +12,7 @@ fn catalog(count: usize) -> Vec<LocalSession> {
                 path: format!("/code/project.wt/s{index:03}"),
                 branch: Some(format!("feature/s{index:03}")),
                 label: None,
+                repo: None,
             }],
             ..session(&format!("s{index:03}"), SessionState::Stopped)
         })
@@ -27,11 +28,12 @@ fn the_second_page_starts_with_its_device_and_project_context(cx: &mut TestAppCo
         let entries = view.read(cx).session_entries();
         assert!(matches!(&entries[0], Entry::Header { text, .. } if text == "LOCAL SESSIONS"));
         assert!(matches!(&entries[1], Entry::Muted { selector, text }
-            if selector == "sessions-project-local-/code/project" && text == "/code/project"));
+            if selector == "sessions-project-local-Unassigned · /code/project"
+                && text == "Unassigned · /code/project"));
         assert!(matches!(entries[2].row(), Some(Row::Local(name)) if name == "s100"));
     });
     let device = bounds(cx, "sessions-local-header");
-    let project = bounds(cx, "sessions-project-local-/code/project");
+    let project = bounds(cx, "sessions-project-local-Unassigned · /code/project");
     assert!(device.bottom() <= project.top());
     assert!(project.bottom() <= bounds(cx, "sessions-row-0").top());
 }

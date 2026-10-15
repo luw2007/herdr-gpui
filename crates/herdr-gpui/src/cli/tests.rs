@@ -2,6 +2,7 @@ use super::*;
 use control::BrowserCommand;
 
 mod control_commands;
+mod projects;
 mod sessions;
 
 #[test]

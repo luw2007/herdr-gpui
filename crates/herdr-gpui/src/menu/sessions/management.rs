@@ -22,6 +22,7 @@ pub(in crate::menu) enum Edit {
         row: Row,
         target: Target,
     },
+    Project(ProjectEdit),
 }
 
 impl HerdrWindow {
@@ -200,6 +201,7 @@ impl HerdrWindow {
             return;
         };
         match edit {
+            Edit::Project(_) => self.submit_project_edit(window, cx),
             Edit::Create { target, input } => {
                 if input.read(cx).is_composing() {
                     return;
@@ -333,6 +335,8 @@ impl HerdrWindow {
         cx: &mut Context<Self>,
     ) {
         if matches!(&self.menu.session_edit, Some(Edit::Create { input, .. }) if input.read(cx).is_composing())
+            || matches!(&self.menu.session_edit, Some(Edit::Project(edit))
+                if edit.input().is_some_and(|input| input.read(cx).is_composing()))
         {
             return;
         }
@@ -390,6 +394,9 @@ impl HerdrWindow {
                         "Herdr will stop this session, terminate its running processes, and remove its saved state. If you are using it, this window switches to default. This cannot be undone.",
                     ));
             }
+            Some(Edit::Project(edit)) => {
+                view = self.project_modal_body(view, edit, cx);
+            }
             None => return view,
         }
         if let Some(error) = &self.menu.error {
@@ -399,6 +406,11 @@ impl HerdrWindow {
                     .child(error.clone()),
             );
         }
+        let project_label = match &self.menu.session_edit {
+            Some(Edit::Project(edit)) => Some(Self::project_submit_label(edit)),
+            _ => None,
+        };
+        let submit = (project_label != Some(None)).then_some(());
         view.child(
             div()
                 .flex()
@@ -420,7 +432,7 @@ impl HerdrWindow {
                             cx.listener(|this, _, window, cx| this.cancel_session_edit(window, cx)),
                         ),
                 )
-                .child(
+                .children(submit.map(|()| {
                     div()
                         .id("session-edit-submit")
                         .debug_selector(|| "session-edit-submit".into())
@@ -435,21 +447,21 @@ impl HerdrWindow {
                             |s| s.text_color(colors::danger(theme)),
                         )
                         .cursor_pointer()
-                        .child(
-                            if matches!(self.menu.session_edit, Some(Edit::Create { .. })) {
-                                "Create and connect"
+                        .child(if let Some(Some(label)) = project_label {
+                            label
+                        } else if matches!(self.menu.session_edit, Some(Edit::Create { .. })) {
+                            "Create and connect"
+                        } else {
+                            if matches!(self.menu.session_edit, Some(Edit::Stop { .. })) {
+                                "Stop session"
                             } else {
-                                if matches!(self.menu.session_edit, Some(Edit::Stop { .. })) {
-                                    "Stop session"
-                                } else {
-                                    "Delete permanently"
-                                }
-                            },
-                        )
+                                "Delete permanently"
+                            }
+                        })
                         .on_click(
                             cx.listener(|this, _, window, cx| this.submit_session_edit(window, cx)),
-                        ),
-                ),
+                        )
+                })),
         )
     }
 }

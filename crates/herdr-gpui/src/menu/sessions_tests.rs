@@ -15,6 +15,7 @@ use herdr_client::{ConnectTarget, LocalSession, SessionState};
 #[cfg(not(windows))]
 mod form_scroll;
 mod input_bounds;
+mod projects;
 mod search;
 
 /// A session as discovery reports it. The socket comes from the same path rules

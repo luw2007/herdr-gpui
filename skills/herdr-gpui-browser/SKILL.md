@@ -1,6 +1,6 @@
 ---
 name: herdr-gpui-browser
-description: "Open a browser tab in Herdr UI to show the user a web page or an HTML file you wrote, beside the terminal you run in, and get back the notes and picks the user sends. Use whenever the user asks to open, start, or show a browser tab, a page, a preview, or a mockup, or asks you to explain, demo, or visualize how something works, or to mock up UI variants to choose from, while you run inside Herdr (HERDR_ENV=1 is set in your environment); prefer it there over other browser skills, over opening Safari or another system browser, and over long text explanations of a flow. Also use it, inside Herdr, for anything Herdr UI itself shows or keeps rather than the herdr daemon: show a file at a line, open a review of your changes, keep a note on a worktree, take or diff a checkpoint, check your branch's pull request and CI, forward or open a port, list or focus the app's windows and tabs, find saved sessions by project, branch, or path in the Sessions manager, wait for a tab to close or the user's notes to arrive, change a Herdr UI setting, theme, or font, or keep the machine awake."
+description: "Open a browser tab in Herdr UI to show the user a web page or an HTML file you wrote, beside the terminal you run in, and get back the notes and picks the user sends. Use whenever the user asks to open, start, or show a browser tab, a page, a preview, or a mockup, or asks you to explain, demo, or visualize how something works, or to mock up UI variants to choose from, while you run inside Herdr (HERDR_ENV=1 is set in your environment); prefer it there over other browser skills, over opening Safari or another system browser, and over long text explanations of a flow. Also use it, inside Herdr, for anything Herdr UI itself shows or keeps rather than the herdr daemon: show a file at a line, open a review of your changes, keep a note on a worktree, take or diff a checkpoint, check your branch's pull request and CI, forward or open a port, list or focus the app's windows and tabs, find saved sessions by project, branch, or path in the Sessions manager, list, create, bind or assign Herdr UI projects (logical folders across devices), wait for a tab to close or the user's notes to arrive, change a Herdr UI setting, theme, or font, or keep the machine awake."
 ---
 <!-- herdr-gpui-managed-skill v1: Herdr UI keeps this file up to date. Edit a copy under another name to keep your changes. -->
 
@@ -215,10 +215,19 @@ for what only Herdr UI shows or keeps.
 | See the processes under a pane, with CPU and memory | `herdr-gpui processes` |
 | List or focus the app's windows and its own tabs | `herdr-gpui window`, `herdr-gpui tab`, `herdr-gpui tab focus ID` |
 | Help the user find a saved session by project, branch, or path | `herdr-gpui sessions QUERY` (opens the manager; the user chooses and confirms) |
+| List Herdr UI projects (logical folders across devices) or see which project this session is in and why | `herdr-gpui project`, `herdr-gpui project show` |
+| Group work under a project: make one, bind a non-git folder, put this session in it | `herdr-gpui project create NAME [--repo KEY]`, `herdr-gpui project bind NAME /abs/path`, `herdr-gpui project assign NAME` |
+| Delete a project (the user confirms in the app's dialog) | `herdr-gpui project delete NAME` |
 | Block until something happens in the app | `herdr-gpui wait tab-closed ID --timeout 600`, `herdr-gpui events --follow` |
 | Read or change a Herdr UI setting | `herdr-gpui config get KEY`, `herdr-gpui config set KEY VALUE` |
 | Keep the machine awake during a long job | `herdr-gpui caffeine on --for 2h` |
 | Check whether the app runs, and which windows and hosts it has | `herdr-gpui status` |
+
+A project is a logical folder across devices: a git repository, joined on every
+device by its normalized remote, or a task codename that needs a `project
+bind` folder per device. A session is in at most one project. Name a project by
+id or exact name; `ambiguous` (exit 1) means use the id. `project delete`
+only opens the confirmation; never assume the project is gone.
 
 Sessions search combines saved workspace context from `session.json` with
 read-only Git repository and branch probes cached for 30 seconds; neither is

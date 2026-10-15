@@ -69,6 +69,9 @@ pub(super) struct Sessions {
     pub(super) mutation_target: Option<ConnectTarget>,
     /// Set while the mutation in flight is a Stop (state kept), not a Delete.
     pub(super) mutation_stop: bool,
+    /// The projects store as of the last change, so building the list never
+    /// reads the global.
+    pub(super) projects: herdr_client::Registry,
     pub(super) departure: Option<Departure>,
     refresh_after_scan: bool,
     pending: Option<mpsc::Receiver<Result<Vec<LocalSession>, Error>>>,

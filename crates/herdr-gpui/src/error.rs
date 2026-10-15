@@ -616,6 +616,8 @@ pub enum Error {
     InvalidAnnotation,
     #[error("Invalid saved browser tabs")]
     InvalidBrowserTabs,
+    #[error("{0}")]
+    Project(#[from] herdr_client::ProjectError),
     #[error("Worktree notes stay in this app and are never sent to the daemon")]
     LocalWorktreeNote,
     #[error("Invalid saved worktree notes")]

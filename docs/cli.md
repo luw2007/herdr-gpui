@@ -47,6 +47,10 @@ Every command accepts:
 | 7 | The app did not answer in time |
 | 8 | Not available on this platform or in this version of the app |
 
+Exit 1 also covers a name that fits more than one thing (`project` commands:
+two projects or devices share it); `--json` then reports the error code
+`ambiguous`.
+
 ## Commands
 
 ### App and windows
@@ -113,6 +117,52 @@ window. `--json` reports that the manager opened, not a session inventory.
 | `scripts setup\|run` | Run one in a new tab; an unseen script still asks first. Archive removes the worktree, so it stays behind the app's delete dialog |
 | `teleport --to HOST` | Open the teleport dialog for your linked worktree, reviewing HOST; you confirm there |
 | `fan-out PROMPT [--agent KIND[:N]]...` | Open the fan-out dialog prefilled; you start it there |
+
+### Projects
+
+| Command | What it does |
+| --- | --- |
+| `project [list]` | Every project: id, name, repository (or task project), per-device folder bindings, and how many sessions are assigned |
+| `project create NAME [--repo KEY\|URL \| --task]` | A git project from a normalized key or a remote URL, or (default) a task project |
+| `project rename PROJECT NEW_NAME` | |
+| `project bind PROJECT PATH [--device ID]` | Tie an absolute folder of a device (default: the window's) to a project |
+| `project unbind PATH [--device ID]` | Drop that binding |
+| `project assign PROJECT [--session NAME] [--device ID]` | Put a session in a project (default: the session the window is attached to) |
+| `project unassign [--session NAME] [--device ID]` | Drop its explicit assignment |
+| `project show [--session NAME] [--device ID]` | The session's project and why: assigned, folder binding, or repository |
+| `project delete PROJECT` | Open the app's delete-project confirmation in the Sessions manager; you confirm there |
+
+A project is a logical folder across devices: a git repository (identified by
+its normalized remote, so clones on every device join it) or a task codename
+joined to each device by a manual folder binding. A session is in at most one
+project, or none. `PROJECT` is an id (the UUID `project list` prints) or an
+exact name, compared without regard to case; an unknown one exits 5, and a
+name two projects share exits 1 with code `ambiguous` and the ids to choose
+from. `--repo` takes a remote URL (`https://`, `ssh://`, `git://`, or
+`git@host:owner/repo`) or a key such as `github.com/owner/repo`, and anything
+else is refused (exit 1) before a project is made. `--device` is an endpoint
+id (`local`, `ssh:ID`, `wsl:DISTRO`) or a device's label as `host list`
+prints it; without it the device showing your workspace, or the window's
+selected one outside Herdr, is used. `--session` is a session name; without
+it the session the device is attached to, which the command cannot tell for
+a device reached by a bare socket path (name it with `--session`).
+
+`project show` reads the saved workspaces the Sessions manager last scanned;
+it starts no scan, so a session the manager has not seen resolves only by
+assignment and the answer says so. `unassign` only removes an explicit
+assignment: a session can still be placed by its folder or repository, and
+`unbind` or `project delete` change that. `list` shows up to 200 projects and
+16 bindings each, with totals when more exist. A duplicate project name or
+repository, a folder already bound to another project, a relative path, and
+any value that is empty, too long (names and references 256 bytes, paths and
+repositories 1024, session names 64), or holds control characters are
+refused (exit 1).
+
+`project delete` never deletes. It opens the Sessions manager on the window's
+own delete-project dialog and reports that confirmation is pending (`--json`:
+`{"kind": "delete_pending", "project": {...}}`); the user confirms or cancels
+there. An open dialog refuses it with exit 6. The sessions stay running, and
+no folder or worktree is touched.
 
 ### Hosts
 

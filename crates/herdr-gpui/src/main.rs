@@ -99,6 +99,7 @@ mod preferences;
 mod presentation;
 mod processes;
 mod progress;
+mod projects;
 mod pull_request;
 #[cfg(feature = "railway")]
 mod railway;

@@ -189,6 +189,51 @@ device is scanned at most once every 30 seconds while the popup is open;
 until it answers, and if it never does, it still offers the session it was
 saved with. Choosing a session attaches this window to it.
 
+### Projects
+
+A **project** is a logical folder that spans devices, so the same work is one
+group in the Sessions manager whichever machine runs it. It is one of two
+kinds:
+
+- A **git project** is identified by its repository: the normalized `origin`
+  (else `upstream`) remote, such as `github.com/owner/repo`, whatever scheme,
+  user, port or `.git` suffix each clone uses. Every session whose saved
+  workspace is a clone of that repository joins it automatically, on any
+  device, with no setup. Linked worktrees inherit it from their repository, so
+  `dx wt` worktree sessions need no binding of their own.
+- A **task project** has no git repository (a codename for a piece of work). A
+  device joins it through a manual **path binding**: an absolute folder on that
+  device. A binding covers the folder and everything below it, and the deepest
+  binding wins.
+
+A session belongs to at most one project, and may belong to none. An explicit
+assignment wins; otherwise the first saved workspace that matches decides, a
+path binding before the repository. Names, branches and labels never decide.
+Unassigned sessions stay listed under **No project**. Assigning, unassigning,
+binding, creating, renaming and deleting a project never stops a session or
+touches a folder or Git worktree; deleting a project only forgets it, its
+bindings and its assignments.
+
+The Sessions manager groups each device's sessions by project, offers a
+per-row project picker, and creates, renames, binds and deletes projects in its
+own dialogs. Projects are shared by every window of the app and are stored
+only on this machine, in `projects.json` in the state directory; no daemon or
+remote host ever sees them. A missing file is an empty registry. A corrupt,
+oversized or newer-version file also starts empty and is kept as
+`projects.json.bad` before the first change overwrites it. A device is named
+by its endpoint id: `local`, `ssh:<id>`, or `wsl:<distro>`.
+
+The same operations are available to scripts and agents as
+`herdr-gpui project ...`: `list`, `create NAME [--repo KEY|URL | --task]`,
+`rename`, `bind`, `unbind`, `assign`, `unassign`, `show`, and `delete`. A
+project is named by its id or by an exact, case-insensitive name; a name two
+projects share is refused as ambiguous (use the id). `bind` and the
+session commands default to the device the window shows and the session it is
+attached to, and refuse rather than act in another session's window.
+`project delete` does not delete: it opens the Sessions manager on its
+delete-project confirmation, and the user confirms there. See
+[`docs/cli.md`](../../docs/cli.md).
+
 Set `device_footer = "auto"` under `[sidebar]` to draw this footer only while
 there are two or more devices (or one is being added), or `"never"` to leave it
 out; the default is `"always"`. Without the footer, the Agents list takes its

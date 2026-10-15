@@ -30,6 +30,7 @@ fn workspace(project: &str, path: &str, label: Option<&str>) -> SessionWorkspace
         path: path.into(),
         branch: None,
         label: label.map(str::to_owned),
+        repo: None,
     }
 }
 

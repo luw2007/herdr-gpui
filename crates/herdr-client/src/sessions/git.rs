@@ -10,7 +10,7 @@
 //! fails never fails a listing. Paths beyond one batch are probed by later
 //! refreshes, which skip what is already cached.
 use super::saved::SessionWorkspace;
-use crate::{shell_quote, ssh};
+use crate::{RepoKey, shell_quote, ssh};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::{
     collections::{HashMap, HashSet},
@@ -32,6 +32,9 @@ const LOCAL_DEADLINE: Duration = Duration::from_secs(5);
 /// The largest remote probe script.
 const SCRIPT_MAX: usize = 48 * 1024;
 
+/// Base64 of the longest remote URL a record may carry.
+const URL_ENCODED_MAX: usize = 2048;
+
 const RECORD: &str = "herdr-git:";
 
 /// What git said about one checkout path.
@@ -39,6 +42,9 @@ const RECORD: &str = "herdr-git:";
 pub(crate) struct GitInfo {
     pub project: Option<String>,
     pub branch: Option<String>,
+    /// The normalized `origin` (else `upstream`) remote. The raw URL can embed
+    /// credentials, so it is normalized where it is read and never kept.
+    pub repo: Option<RepoKey>,
 }
 
 type Key = (String, String);
@@ -151,6 +157,19 @@ fn git(path: &str, args: &[&str], timeout: Duration) -> Option<String> {
         .flatten()
 }
 
+/// The repository a remote URL names, or `None` for a missing, local, or
+/// unusable one. The URL is dropped here.
+fn repo_of(url: &str) -> Option<RepoKey> {
+    RepoKey::from_remote_url(url)
+}
+
+/// `origin`'s URL, else `upstream`'s, as a normalized key.
+fn remote_repo(path: &str, timeout: impl Fn() -> Duration) -> Option<RepoKey> {
+    ["remote.origin.url", "remote.upstream.url"]
+        .iter()
+        .find_map(|key| repo_of(&git(path, &["config", "--get", key], timeout())?))
+}
+
 /// Probe local checkouts one after another until the batch or the deadline ends.
 pub(crate) fn probe_local(paths: &[String]) -> Found {
     let deadline = Instant::now() + LOCAL_DEADLINE;
@@ -165,6 +184,7 @@ pub(crate) fn probe_local(paths: &[String]) -> Found {
             project: project_of(path, &common, false),
             branch: git(path, &["symbolic-ref", "--short", "-q", "HEAD"], left())
                 .and_then(|branch| clean(&branch)),
+            repo: remote_repo(path, left),
         });
         found.insert(path.clone(), info);
     }
@@ -183,9 +203,11 @@ for p in {}; do
     i=$((i + 1))
     common=$(git -C "$p" rev-parse --git-common-dir 2>/dev/null) || continue
     branch=$(git -C "$p" symbolic-ref --short -q HEAD 2>/dev/null || :)
+    url=$(git -C "$p" config --get remote.origin.url 2>/dev/null || git -C "$p" config --get remote.upstream.url 2>/dev/null || :)
     c=$(printf %s "$common" | base64 | tr -d '\n\r')
     b=$(printf %s "$branch" | base64 | tr -d '\n\r')
-    printf '{RECORD}%s:%s:%s\n' "$i" "$c" "$b"
+    u=$(printf %s "$url" | base64 | tr -d '\n\r')
+    printf '{RECORD}%s:%s:%s:%s\n' "$i" "$c" "$b" "$u"
 done
 printf '{}\n'"#,
         words.join(" "),
@@ -234,9 +256,16 @@ pub(crate) fn parse_remote(paths: &[String], output: &[u8]) -> Found {
             else {
                 continue;
             };
+            // Records from before remotes were probed have no fourth field.
+            let repo = fields
+                .next()
+                .filter(|url| url.len() <= URL_ENCODED_MAX)
+                .and_then(decode)
+                .and_then(|url| repo_of(&url));
             let info = GitInfo {
                 project: decode(common).and_then(|common| project_of(path, &common, true)),
                 branch: decode(branch).and_then(|branch| clean(&branch)),
+                repo,
             };
             found.insert(path.clone(), Some(info));
         }
@@ -305,6 +334,8 @@ pub(crate) fn enrich(
         if let Some(branch) = &info.branch {
             workspace.branch = Some(branch.clone());
         }
+        // A finished probe is authoritative: no remote now means no repo.
+        workspace.repo.clone_from(&info.repo);
     }
 }
 

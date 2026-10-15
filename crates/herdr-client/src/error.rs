@@ -37,6 +37,8 @@ pub enum Error {
     Protocol(#[from] herdr_protocol::Error),
     #[error("invalid endpoint JSON: {0}")]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Project(#[from] crate::projects::ProjectError),
     // Schema details may contain secret-bearing unknown field names. Keep the
     // source for diagnostics, but never include it in presentation text.
     #[error("invalid endpoint catalog schema")]

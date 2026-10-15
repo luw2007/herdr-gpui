@@ -5,6 +5,7 @@
 pub(crate) mod app;
 pub(crate) mod events;
 pub(crate) mod hosts;
+pub(crate) mod projects;
 pub(crate) mod settings;
 pub(crate) mod tabs;
 pub(crate) mod work;
@@ -13,8 +14,8 @@ use crate::cli::control::Placement;
 use serde::{Deserialize, Serialize};
 
 /// Raised whenever a request or reply changes shape, so `status` can tell
-/// an outdated app from a refused request. 4: queried Sessions manager.
-pub(crate) const PROTOCOL_VERSION: u32 = 4;
+/// an outdated app from a refused request. 5: projects.
+pub(crate) const PROTOCOL_VERSION: u32 = 5;
 
 /// Older apps and clients know only tabs, so a tab is left off the wire.
 fn is_tab(placement: &Placement) -> bool {
@@ -55,6 +56,8 @@ pub(crate) enum Request {
     Work(Call<work::WorkOp>),
     #[serde(rename = "host")]
     Host(Call<hosts::HostOp>),
+    #[serde(rename = "project")]
+    Project(Call<projects::ProjectOp>),
     #[serde(rename = "settings")]
     Settings(Call<settings::SettingsOp>),
     #[serde(rename = "events")]
@@ -185,6 +188,8 @@ pub enum ErrorCode {
     Failed,
     /// A dialog or menu holds the window, so it takes no commands now.
     WindowBusy,
+    /// A name fits more than one thing, so nothing was done.
+    Ambiguous,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -224,6 +229,9 @@ pub(crate) enum Response {
     },
     Host {
         reply: hosts::Reply,
+    },
+    Project {
+        reply: projects::Reply,
     },
     Settings {
         reply: settings::Reply,

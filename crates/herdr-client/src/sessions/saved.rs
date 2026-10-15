@@ -9,7 +9,7 @@
 //! JSON, or shaped differently yields no workspaces for that one session and
 //! never fails a listing.
 use super::{LIMIT, SessionList};
-use crate::discovery::valid_session_name;
+use crate::{RepoKey, discovery::valid_session_name};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
 use std::{
@@ -56,6 +56,11 @@ pub struct SessionWorkspace {
     pub branch: Option<String>,
     /// The workspace's saved name or worktree-group label.
     pub label: Option<String>,
+    /// The repository's normalized `origin` (else `upstream`) remote as git
+    /// last reported it; `None` without a remote, a probe, or a usable URL.
+    /// Only this key is kept: the raw URL can embed credentials and is dropped
+    /// as soon as it is read.
+    pub repo: Option<RepoKey>,
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {
@@ -96,6 +101,7 @@ pub(crate) fn parse_snapshot(bytes: &[u8]) -> Vec<SessionWorkspace> {
             path,
             branch: text(workspace, "branch").or_else(|| text(space, "branch")),
             label: text(workspace, "custom_name").or_else(|| text(space, "label")),
+            repo: None,
         });
     }
     workspaces

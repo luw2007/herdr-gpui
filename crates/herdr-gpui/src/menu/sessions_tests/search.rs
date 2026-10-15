@@ -10,6 +10,7 @@ fn workspace(project: &str, path: &str, branch: Option<&str>) -> SessionWorkspac
         path: path.into(),
         branch: branch.map(Into::into),
         label: None,
+        repo: None,
     }
 }
 
@@ -150,7 +151,11 @@ fn sessions_group_by_project_and_unclassified_comes_last(cx: &mut TestAppContext
             })
             .collect()
     });
-    assert!(headings.iter().any(|text| text == "/code/portal"));
+    assert!(
+        headings
+            .iter()
+            .any(|text| text == "Unassigned · /code/portal")
+    );
 }
 
 #[gpui::test]

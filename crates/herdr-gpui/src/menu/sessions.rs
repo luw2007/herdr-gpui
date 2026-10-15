@@ -9,9 +9,11 @@ use gpui::{prelude::*, *};
 use herdr_client::{ConnectTarget, LocalSession, SessionWorkspace};
 mod catalog;
 mod management;
+mod projects;
 mod view;
 pub(super) use catalog::Filter;
 pub(super) use management::Edit;
+pub(super) use projects::ProjectEdit;
 pub(super) use view::View;
 
 /// The manager is wide: a row carries a project, a branch and a state.
@@ -56,7 +58,7 @@ pub(super) enum Row {
 #[derive(Clone)]
 pub(super) struct Spec {
     label: SharedString,
-    detail: SharedString,
+    pub(in crate::menu) detail: SharedString,
     /// The saved workspace context line, when the session has any.
     context: Option<SharedString>,
     /// Running locally, or connected remotely.
@@ -127,6 +129,7 @@ impl HerdrWindow {
         // Probe again on every open. The list from the last open paints at once,
         // so the popup is never blank while the new scan runs.
         self.sessions.refresh();
+        self.sync_projects(cx);
         self.menu.page = Some(Page::Sessions);
         self.open_sessions_view(window, cx);
         self.pin_first_session();
@@ -346,11 +349,24 @@ impl HerdrWindow {
         let rows: Vec<_> = rows
             .into_iter()
             .filter(|(name, _, online, _, workspaces)| {
-                filter.admits(*online) && query.matches(&endpoint.label, name, *online, workspaces)
+                let project = self.session_project(&endpoint.id, name, workspaces);
+                filter.admits(*online)
+                    && query.matches(
+                        &endpoint.label,
+                        name,
+                        *online,
+                        project.as_ref().map(|(name, _)| name.as_str()),
+                        workspaces,
+                    )
             })
             .collect();
-        let grouped = catalog::group(rows, |row| row.4.as_slice());
+        let place = |row: &(String, String, bool, bool, Vec<SessionWorkspace>)| {
+            let project = self.session_project(&endpoint.id, &row.0, &row.4);
+            catalog::Place::of(project.as_ref().map(|(name, _)| name.as_str()), &row.4)
+        };
+        let grouped = catalog::group(rows, place);
         for (heading, (name, detail, online, checked, workspaces)) in grouped {
+            let detail = self.with_source(detail, &endpoint.id, &name, &workspaces);
             if let Some(heading) = heading {
                 entries.push(Entry::Muted {
                     selector: format!("sessions-project-{}-{heading}", endpoint.id),
@@ -427,11 +443,22 @@ impl HerdrWindow {
                         device,
                         &session.name,
                         session.state.running(),
+                        self.local_project(session)
+                            .as_ref()
+                            .map(|(name, _)| name.as_str()),
                         &session.workspaces,
                     )
             })
             .collect();
-        for (heading, session) in catalog::group(shown, |session| session.workspaces.as_slice()) {
+        let place = |session: &&LocalSession| {
+            catalog::Place::of(
+                self.local_project(session)
+                    .as_ref()
+                    .map(|(name, _)| name.as_str()),
+                &session.workspaces,
+            )
+        };
+        for (heading, session) in catalog::group(shown, place) {
             if let Some(heading) = heading {
                 entries.push(Entry::Muted {
                     selector: format!("sessions-project-local-{heading}"),
@@ -462,7 +489,14 @@ impl HerdrWindow {
     fn local_session_spec(&self, session: &LocalSession, query: &catalog::Query) -> Spec {
         Spec {
             label: session.name.clone().into(),
-            detail: state_word(session.state.running()).into(),
+            detail: self
+                .with_source(
+                    state_word(session.state.running()).to_owned(),
+                    &self.endpoints[0].id,
+                    &session.name,
+                    &session.workspaces,
+                )
+                .into(),
             context: catalog::summary(&session.workspaces, query).map(Into::into),
             online: session.state.running(),
             checked: self
@@ -510,6 +544,7 @@ impl HerdrWindow {
         let removable = !matches!(choice, Row::Add(_));
         let hover_row = choice.clone();
         let stop_row = choice.clone();
+        let move_row = choice.clone();
         let stop_target = self.management_target(&choice);
         let deletion_color = if self.session_delete_reason(&choice).is_none() {
             colors::danger(theme)
@@ -594,6 +629,23 @@ impl HerdrWindow {
             // Every real row has the same columns, status dot, Stop slot, trash,
             // so they line up whether or not a session can be stopped or deleted.
             // The slot is empty for a stopped session.
+            .when(removable, |container| {
+                container.child(
+                    super::action_icon(
+                        "icons/pencil.svg",
+                        format!("sessions-project-icon-{row}"),
+                        rgb(theme.muted),
+                        rgb(theme.foreground),
+                    )
+                    .id(("session-project", row))
+                    .debug_selector(move || format!("sessions-project-{row}"))
+                    .hover(|s| s.bg(colors::action_hover(theme)))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        cx.stop_propagation();
+                        this.open_project_move(move_row.clone(), window, cx);
+                    })),
+                )
+            })
             .when(removable, |container| {
                 let slot = div().size(px(24.)).flex_none();
                 if !spec.online {
@@ -835,6 +887,9 @@ impl HerdrWindow {
     ) {
         if matches!(&self.menu.session_edit, Some(Edit::Create { input, .. })
             if input.read(cx).is_composing() || !matches!(event.keystroke.key.as_str(), "enter" | "escape"))
+            || matches!(&self.menu.session_edit, Some(Edit::Project(edit))
+                if edit.input().is_some_and(|input| input.read(cx).is_composing())
+                    || (edit.input().is_some() && !matches!(event.keystroke.key.as_str(), "enter" | "escape")))
         {
             return;
         }

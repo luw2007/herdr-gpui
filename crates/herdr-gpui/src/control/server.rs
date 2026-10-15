@@ -6,6 +6,7 @@ mod app;
 mod browser;
 mod events;
 mod hosts;
+mod projects;
 mod settings;
 mod tabs;
 mod work;
@@ -237,6 +238,7 @@ fn named_window(request: &Request) -> Option<u64> {
         Request::Tab(call) => call.caller.window,
         Request::Work(call) => call.caller.window,
         Request::Host(call) => call.caller.window,
+        Request::Project(call) => call.caller.window,
         Request::Settings(call) => call.caller.window,
         Request::Events(call) => call.caller.window,
     }
@@ -279,6 +281,7 @@ fn serve(incoming: socket::Incoming, state: &mut State, cx: &mut App) {
         Request::Tab(call) => tabs::serve(call, incoming, &mut state.watches, cx),
         Request::Work(call) => work::serve(call, incoming, &mut state.watches, cx),
         Request::Host(call) => hosts::serve(call, incoming, &mut state.watches, cx),
+        Request::Project(call) => incoming.respond(projects::project(call, cx)),
         Request::Settings(call) => settings::serve(call, incoming, &mut state.watches, cx),
         Request::Events(call) => events::serve(call, incoming, &mut state.watches, cx),
     }

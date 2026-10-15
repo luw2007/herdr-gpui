@@ -6,7 +6,7 @@
 //! branch, never by workspace ID, which does not survive a daemon restart.
 //! Flows that change things for real only open the app's own dialog, already
 //! pointed at that checkout; the user confirms them there.
-mod flows;
+pub(super) mod flows;
 mod notes;
 #[cfg(test)]
 mod tests;

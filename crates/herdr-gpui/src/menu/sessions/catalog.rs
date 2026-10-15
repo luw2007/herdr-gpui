@@ -92,14 +92,16 @@ impl Query {
         device: &str,
         session: &str,
         running: bool,
+        project_name: Option<&str>,
         workspaces: &[SessionWorkspace],
     ) -> bool {
         if self.words.is_empty() {
             return true;
         }
         let mut haystack = format!(
-            "{device}\n{session}\n{}",
-            if running { "running" } else { "stopped" }
+            "{device}\n{session}\n{}\n{}",
+            if running { "running" } else { "stopped" },
+            project_name.unwrap_or_default()
         );
         for workspace in workspaces {
             for text in [Some(&workspace.project), Some(&workspace.path)]
@@ -150,34 +152,67 @@ pub(super) fn summary(workspaces: &[SessionWorkspace], query: &Query) -> Option<
     Some(text)
 }
 
-/// Reorder `items` so sessions of one project sit together, projects by name
-/// and unclassified last, keeping each group's incoming order. Returns the
-/// group title preceding each item's first appearance.
-pub(super) fn group<T>(
-    mut items: Vec<T>,
-    workspaces: impl Fn(&T) -> &[SessionWorkspace],
-) -> Vec<(Option<String>, T)> {
-    let classified = items.iter().any(|item| project(workspaces(item)).is_some());
-    if !classified {
+/// Where a session is filed: the project it resolved to, else the first saved
+/// workspace's path label, else nothing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Place {
+    Project(String),
+    Path(String),
+    Nowhere,
+}
+
+impl Place {
+    /// `project` is the resolved project's name, if any.
+    pub(super) fn of(project: Option<&str>, workspaces: &[SessionWorkspace]) -> Self {
+        match (project, self::project(workspaces)) {
+            (Some(name), _) => Self::Project(name.to_owned()),
+            (None, Some(path)) => Self::Path(path.to_owned()),
+            (None, None) => Self::Nowhere,
+        }
+    }
+
+    fn rank(&self) -> u8 {
+        match self {
+            Self::Project(_) => 0,
+            Self::Path(_) => 1,
+            Self::Nowhere => 2,
+        }
+    }
+
+    fn sort_key(&self) -> (u8, String) {
+        let text = match self {
+            Self::Project(text) | Self::Path(text) => text.to_lowercase(),
+            Self::Nowhere => String::new(),
+        };
+        (self.rank(), text)
+    }
+
+    fn heading(&self) -> String {
+        match self {
+            Self::Project(name) => name.clone(),
+            Self::Path(path) => format!("Unassigned · {path}"),
+            Self::Nowhere => "Unassigned".to_owned(),
+        }
+    }
+}
+
+/// Reorder `items` so sessions of one project sit together, projects by name,
+/// then unassigned sessions (kept apart by their saved path, as before), then
+/// those with nothing to file them by, keeping each group's incoming order.
+/// Returns the group title preceding each item's first appearance. With no
+/// project at all the list stays flat and untitled.
+pub(super) fn group<T>(mut items: Vec<T>, place: impl Fn(&T) -> Place) -> Vec<(Option<String>, T)> {
+    if items.iter().all(|item| place(item) == Place::Nowhere) {
         return items.into_iter().map(|item| (None, item)).collect();
     }
-    items.sort_by(|a, b| {
-        let key = |item: &T| project(workspaces(item)).map(str::to_lowercase);
-        match (key(a), key(b)) {
-            (Some(a), Some(b)) => a.cmp(&b),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => std::cmp::Ordering::Equal,
-        }
-    });
-    let mut previous: Option<Option<String>> = None;
+    items.sort_by_cached_key(|item| place(item).sort_key());
+    let mut previous: Option<Place> = None;
     items
         .into_iter()
         .map(|item| {
-            let title = project(workspaces(&item)).map(str::to_owned);
-            let heading = (previous.as_ref() != Some(&title))
-                .then(|| title.clone().unwrap_or_else(|| "Unclassified".to_owned()));
-            previous = Some(title);
+            let place = place(&item);
+            let heading = (previous.as_ref() != Some(&place)).then(|| place.heading());
+            previous = Some(place);
             (heading, item)
         })
         .collect()

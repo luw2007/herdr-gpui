@@ -642,6 +642,10 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         _host_theme: HerdrWindow::observe_host_theme(cx),
         browser: crate::browser::Browser::new(cx),
         _browser_tabs: cx.observe_global::<crate::browser::Store>(|_, cx| cx.notify()),
+        _projects: cx.observe_global::<crate::projects::Projects>(|this, cx| {
+            this.sync_projects(cx);
+            cx.notify();
+        }),
         _worktree_notes: HerdrWindow::observe_worktree_notes(window, cx),
         prefix_armed: false,
         resize_mode: false,
