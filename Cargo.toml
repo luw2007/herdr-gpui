@@ -12,6 +12,15 @@ version = "0.1.0"
 # Workspace crates are not published to crates.io; they build this application.
 publish = false
 
+# Workspace crates keep line tables (backtraces, breakpoints by line); third-party
+# crates carry none. Incremental compilation keeps Cargo's dev default; release
+# profiles are untouched. Trade-offs: README "From source".
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [workspace.lints.rust]
 unsafe_code           = "deny"
 unused_qualifications = "deny"

@@ -242,6 +242,20 @@ On macOS both build a local bundle identified as `so.pen.herdr-gpui.dev`, so
 it never shares a Dock tile or icon cache with an installed release.
 Without `just`: `cargo run --locked --release -p herdr-gpui --features qa-menu`.
 
+Development and test builds (`[profile.dev]`, which `cargo test` inherits) use
+`debug = "line-tables-only"` for workspace crates and no debug information for
+third-party dependencies, to keep `target/` small. Incremental compilation stays
+on (Cargo's dev default); release profiles are unchanged.
+
+What this keeps: panic backtraces with file and line for workspace code, and
+line breakpoints and stepping in LLDB/GDB. What it gives up: debugger variable,
+argument and type inspection (`frame variable`, `p`), and source-level frames
+inside dependencies, which show only symbol names. For a session that needs
+those, temporarily set `[profile.dev] debug = 2` and remove the
+`[profile.dev.package."*"]` override in `Cargo.toml`. Changing these settings
+recompiles affected crates but does not remove artifacts built with the
+previous settings; run `cargo clean` to reclaim that space.
+
 To compile and install the optimized executable on macOS, Linux, or Windows:
 
 ```sh
