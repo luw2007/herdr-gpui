@@ -68,6 +68,49 @@ fn select_host(view: &mut crate::HerdrWindow, host: crate::github::Auth) {
 fn login(profile: Option<&crate::github::Profile>) -> Option<&str> {
     profile.map(|profile| profile.login.as_str())
 }
+#[gpui::test]
+fn ssh_slots_share_only_the_catalog_devices_github_account(cx: &mut TestAppContext) {
+    let (view, cx) = cx.add_window_view(crate::sidebar::layout_tests::fixture_window);
+    cx.update(|_, cx| {
+        view.update(cx, |view, _| {
+            view.menu.github = crate::github::Auth::connected_fixture();
+            let mut work = crate::github::Auth::connected_fixture();
+            work.profile.as_mut().unwrap().login = "work-user".into();
+            select_host(view, work);
+            let slot_id = format!("slot:{HOST}:work");
+            let mut slot = crate::endpoint::Endpoint::new(
+                slot_id.clone(),
+                "Work box".into(),
+                herdr_client::ConnectTarget::Ssh {
+                    target: "me@work".into(),
+                    session: "work".into(),
+                },
+                true,
+            );
+            slot.slot = Some(herdr_client::SessionRef::new(
+                herdr_client::DeviceKey::new(HOST).unwrap(),
+                "work",
+            ));
+            view.endpoints.push(slot);
+            view.selected_endpoint = view.endpoints.len() - 1;
+            view.menu
+                .github_hosts
+                .insert(slot_id.clone(), crate::github::Auth::default());
+            view.sync_github_hosts();
+            assert_eq!(view.github_host(), Some(HOST));
+            assert_eq!(
+                login(view.github_auth().profile.as_ref()),
+                Some("work-user")
+            );
+            assert_eq!(login(view.pr_profile()), Some("work-user"));
+            assert!(!view.menu.github_hosts.contains_key(&slot_id));
+            view.endpoints.remove(1);
+            view.selected_endpoint -= 1;
+            view.sync_github_hosts();
+            assert!(!view.menu.github_hosts.contains_key(HOST));
+        });
+    });
+}
 
 #[gpui::test]
 fn a_host_uses_its_own_account_and_falls_back_to_the_main_one(cx: &mut TestAppContext) {

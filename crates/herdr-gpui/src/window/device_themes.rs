@@ -285,23 +285,24 @@ impl HerdrWindow {
         let Some(endpoint) = self.endpoints.get(self.selected_endpoint) else {
             return &self.theme;
         };
-        if let Some(preview) = self.device_theme_preview(&endpoint.id) {
+        let device = endpoint.device_id();
+        if let Some(preview) = self.device_theme_preview(device) {
             return preview;
         }
         if let Some(pinned) = self
             .device_themes
             .pinned
             .as_ref()
-            .filter(|pinned| pinned.endpoint == endpoint.id)
+            .filter(|pinned| pinned.endpoint == device)
         {
             return pinned.theme.as_ref().unwrap_or(&self.theme);
         }
         // A theme removed from the config stops at once, without waiting
         // for the read that drops it.
-        if self.config.device_theme(&endpoint.id).is_none() {
+        if self.config.device_theme(device).is_none() {
             return &self.theme;
         }
-        crate::endpoint::saved_profile_id(&endpoint.id)
+        crate::endpoint::saved_profile_id(device)
             .and_then(|profile| self.device_themes.get(profile))
             .unwrap_or(&self.theme)
     }

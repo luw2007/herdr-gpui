@@ -1,28 +1,37 @@
 //! Projects: logical folders that span devices. Requests name a project by id
 //! or exact name, a device by endpoint id or label, and a session by name; the
 //! app's answers are bounded so a large registry still fits one message.
+#[cfg(any(unix, test))]
 use herdr_client::RepoKey;
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+mod manage;
+
+#[cfg(any(unix, test))]
 /// The longest project reference (an id or a name) a request carries, in bytes.
 pub(crate) const MAX_PROJECT_REF: usize = 256;
+#[cfg(any(unix, test))]
 /// The longest repository key or remote URL, in bytes.
 pub(crate) const MAX_REPO: usize = 1024;
+#[cfg(any(unix, test))]
 /// The longest bound folder, in bytes; the registry holds the same limit.
 pub(crate) const MAX_PATH: usize = 1024;
+#[cfg(any(unix, test))]
 /// The longest device reference (an endpoint id or a label), in bytes.
 pub(crate) const MAX_DEVICE: usize = 512;
+#[cfg(any(unix, test))]
 /// The longest session name, as Herdr itself allows.
 pub(crate) const MAX_SESSION: usize = 64;
 /// The most projects, and per project the most bindings, one list answer
 /// names; `total` and `bindings_total` say what was left out.
-#[cfg(any(unix, test))]
+#[cfg(unix)]
 pub(crate) const MAX_LISTED_PROJECTS: usize = 200;
-#[cfg(any(unix, test))]
+#[cfg(unix)]
 pub(crate) const MAX_LISTED_BINDINGS: usize = 16;
 /// A list answer stops adding projects once its text would pass this many
 /// bytes, well inside the socket's message limit.
-#[cfg(any(unix, test))]
+#[cfg(unix)]
 pub(crate) const LIST_BUDGET: usize = 128 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,6 +39,8 @@ pub(crate) const LIST_BUDGET: usize = 128 * 1024;
 pub(crate) enum ProjectOp {
     /// Every project with its bindings and assigned session count.
     List,
+    /// Open the Projects manager, including when no projects exist.
+    Manage {},
     /// A git project when `repo` is set (a normalized key), else a task one.
     Create {
         name: String,
@@ -81,23 +92,28 @@ pub(crate) enum ProjectOp {
     },
 }
 
+#[cfg(any(unix, test))]
 /// Whether `value` is a non-empty, printable text of at most `max` bytes.
 fn text(value: &str, max: usize) -> bool {
     !value.is_empty() && value.len() <= max && !value.chars().any(char::is_control)
 }
 
+#[cfg(any(unix, test))]
 fn optional(value: &Option<String>, max: usize) -> bool {
     value.as_deref().is_none_or(|value| text(value, max))
 }
 
+#[cfg(any(unix, test))]
 pub(crate) fn valid_session(name: &str) -> bool {
     text(name, MAX_SESSION) && session_name(name)
 }
 
+#[cfg(any(unix, test))]
 fn session_ok(value: &Option<String>) -> bool {
     value.as_deref().is_none_or(valid_session)
 }
 
+#[cfg(any(unix, test))]
 impl ProjectOp {
     /// Why a request is malformed, before anything is looked up. Every
     /// reference is echoed in answers, so none may hold a control character.
@@ -110,7 +126,7 @@ impl ProjectOp {
         let device = |value: &Option<String>| check(optional(value, MAX_DEVICE), DEVICE);
         let session = |value: &Option<String>| check(session_ok(value), SESSION);
         match self {
-            Self::List => Ok(()),
+            Self::List | Self::Manage {} => Ok(()),
             Self::Create { name, repo } => {
                 check(text(name, MAX_PROJECT_REF), REF)?;
                 check(
@@ -167,6 +183,7 @@ impl ProjectOp {
     }
 }
 
+#[cfg(any(unix, test))]
 /// A repository from a remote URL or from a key (`host/owner/repo`), which has
 /// no scheme: a key is read as the address of an `https` remote.
 pub(crate) fn parse_repo(text: &str) -> Option<RepoKey> {
@@ -179,6 +196,7 @@ pub(crate) fn parse_repo(text: &str) -> Option<RepoKey> {
     })
 }
 
+#[cfg(any(unix, test))]
 /// Whether a session name is one Herdr could have made.
 fn session_name(name: &str) -> bool {
     !matches!(name, "." | "..")

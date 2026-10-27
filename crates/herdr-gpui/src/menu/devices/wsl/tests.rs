@@ -142,6 +142,29 @@ fn a_wsl_device_menu_only_offers_removal(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn a_wsl_session_header_opens_its_devices_removal(cx: &mut TestAppContext) {
+    let (view, cx) = cx.add_window_view(fixture_window);
+    view.update_in(cx, |view, window, cx| {
+        view.endpoints[0].connection.target = ConnectTarget::Local;
+        view.reconcile_catalog(Vec::new(), vec![wsl("Ubuntu")], cx);
+        let mut slot = crate::endpoint::Endpoint::new(
+            "slot:wsl:Ubuntu:work".into(),
+            "Ubuntu".into(),
+            ConnectTarget::Local,
+            true,
+        );
+        slot.slot = Some(herdr_client::SessionRef::new(
+            herdr_client::DeviceKey::new("wsl:Ubuntu").unwrap(),
+            "work",
+        ));
+        view.endpoints.push(slot);
+        view.open_host_menu("slot:wsl:Ubuntu:work", Point::default(), window, cx);
+        assert_eq!(view.menu.page, Some(Page::RemoveWsl));
+        assert_eq!(view.menu.wsl_remove.as_deref(), Some("Ubuntu"));
+    });
+}
+
+#[gpui::test]
 fn an_explicit_socket_window_never_offers_wsl_removal(cx: &mut TestAppContext) {
     let (view, cx) = cx.add_window_view(fixture_window);
     view.update_in(cx, |view, window, cx| {

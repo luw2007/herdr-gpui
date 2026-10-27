@@ -137,3 +137,5 @@ fn cloud_devices_follow_ssh_hosts_and_survive_an_unreadable_list(cx: &mut gpui::
 
 mod storage_warning;
 mod wsl;
+
+mod forget;

@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use uuid::Uuid;
 
-const NAME_MAX: usize = 64;
+pub(crate) const NAME_MAX: usize = 64;
 const DEVICE_MAX: usize = 128;
 pub(crate) const PATH_MAX: usize = 1024;
 
@@ -17,6 +17,11 @@ pub struct ProjectId(String);
 impl ProjectId {
     pub(crate) fn generate() -> Self {
         Self(Uuid::new_v4().hyphenated().to_string())
+    }
+
+    /// The stable id of a derived identity, such as a discovered project.
+    pub(crate) fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid.hyphenated().to_string())
     }
 
     /// An id read back from storage or a command line.
@@ -64,6 +69,22 @@ impl DeviceKey {
             return Err(ProjectError::InvalidDevice);
         }
         Ok(Self(key))
+    }
+
+    /// A key for an endpoint id that is not guaranteed to be valid: controls
+    /// are dropped and the key is cut to the limit; an id with nothing left
+    /// becomes `device`. Lossy only for ids no real catalog produces.
+    pub fn sanitized(key: &str) -> Self {
+        let clean: String = key
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(DEVICE_MAX)
+            .collect();
+        if clean.is_empty() {
+            Self("device".to_owned())
+        } else {
+            Self(clean)
+        }
     }
 
     pub fn as_str(&self) -> &str {

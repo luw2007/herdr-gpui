@@ -11,6 +11,7 @@ fn workspace(project: &str, path: &str, branch: Option<&str>) -> SessionWorkspac
         branch: branch.map(Into::into),
         label: None,
         repo: None,
+        ..Default::default()
     }
 }
 

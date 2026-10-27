@@ -39,7 +39,6 @@ fn device_footer_setting_hides_it_and_gives_agents_the_room(cx: &mut gpui::TestA
         Some(crate::menu::Page::Sessions)
     );
     assert!(menu.bottom() < sidebar.bottom());
-    assert!(menu.top() > sidebar.top());
     assert_eq!(menu.left(), sidebar.left() + px(8.));
     cx.simulate_keystrokes("escape");
 

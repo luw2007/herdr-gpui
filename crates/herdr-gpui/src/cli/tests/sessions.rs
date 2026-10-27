@@ -24,7 +24,10 @@ fn sessions_opens_the_manager_with_query_and_explicit_target() {
             LaunchOptions::parse(args).unwrap().mode,
             LaunchMode::Control(Invocation {
                 command: ControlCommand::Sessions {
-                    query: query.into()
+                    query: query.into(),
+                    device: None,
+                    project: None,
+                    unassigned: false,
                 },
                 json,
                 window,
@@ -75,26 +78,69 @@ fn container_commands_parse_with_json_and_native_window_targeting() {
         )
     );
     assert_eq!(
-        mode(&["container", "focus", "3", "--window", "9"]).unwrap(),
-        control(ContainerCommand::Focus { id: 3 }, false, Some(9))
+        mode(&["container", "focus", "Build", "--window", "9"]).unwrap(),
+        control(
+            ContainerCommand::Focus {
+                window: "Build".into()
+            },
+            false,
+            Some(9)
+        )
     );
     assert_eq!(
         mode(&["container", "attach", "work", "--device", "ssh:box"]).unwrap(),
         control(
             ContainerCommand::Attach {
                 session: "work".into(),
-                device: Some("ssh:box".into())
+                device: Some("ssh:box".into()),
+                window: None
             },
             false,
             None
         )
     );
     for bad in [
-        vec!["container", "focus", "x"],
+        vec!["container", "focus"],
         vec!["container", "attach"],
         vec!["container", "stop"],
         vec!["container", "new", "--bogus"],
     ] {
         assert!(mode(&bad).is_err(), "{bad:?}");
     }
+}
+
+#[test]
+fn sessions_device_and_project_filters_parse_and_conflict_is_refused() {
+    let mode = |args: &[&str]| LaunchOptions::parse(args.iter().copied()).map(|o| o.mode);
+    let sessions = |query: &str, device: Option<&str>, project: Option<&str>, unassigned| {
+        LaunchMode::Control(Invocation {
+            command: ControlCommand::Sessions {
+                query: query.into(),
+                device: device.map(Into::into),
+                project: project.map(Into::into),
+                unassigned,
+            },
+            json: false,
+            window: None,
+        })
+    };
+    assert_eq!(
+        mode(&[
+            "sessions",
+            "--device",
+            "ssh:box",
+            "--project",
+            "App",
+            "feature"
+        ])
+        .unwrap(),
+        sessions("feature", Some("ssh:box"), Some("App"), false)
+    );
+    assert_eq!(
+        mode(&["sessions", "--no-project"]).unwrap(),
+        sessions("", None, None, true)
+    );
+    assert!(mode(&["sessions", "--project", "App", "--no-project"]).is_err());
+    assert!(mode(&["sessions", "--device"]).is_err());
+    assert!(mode(&["sessions", "--device", "a", "--device", "b"]).is_err());
 }

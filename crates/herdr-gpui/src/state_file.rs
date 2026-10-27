@@ -46,6 +46,31 @@ pub(crate) fn write<T: Serialize + ?Sized>(path: &Path, value: &T) -> crate::Res
     Ok(())
 }
 
+/// Holds the cross-process lock of the state file until dropped.
+pub(crate) struct Lock(fs::File);
+impl Drop for Lock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+/// Serializes read-modify-write cycles across app processes. The sibling
+/// lock file is never removed: all writers must lock the same inode. Uses
+/// the standard file lock (flock on Unix, LockFileEx on Windows). Blocks;
+/// callers must run this off the UI thread.
+pub(crate) fn lock(path: &Path) -> crate::Result<Lock> {
+    let parent = path.parent().ok_or(crate::Error::MissingStateRoot)?;
+    fs::create_dir_all(parent)?;
+    let mut name = path.file_name().unwrap_or_default().to_owned();
+    name.push(".lock");
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(parent.join(name))?;
+    file.lock()?;
+    Ok(Lock(file))
+}
 /// Saves the most recent value handed to it. Values replaced before the
 /// worker reads them are never written.
 pub(crate) struct Writer<T> {
@@ -68,7 +93,19 @@ impl<T: Serialize + Send + 'static> Writer<T> {
     pub(crate) fn start_preserving(
         name: &str,
         path: PathBuf,
+        preserve: Option<PathBuf>,
+    ) -> io::Result<Self> {
+        Self::start_with(name, path, preserve, |path, value| write(path, &value))
+    }
+    /// Like [`Writer::start_preserving`], but `save` stores each value instead
+    /// of a plain atomic write. It runs on the worker, so it may block: a
+    /// registry shared by several app processes locks, rereads and merges
+    /// there (see [`lock`]).
+    pub(crate) fn start_with(
+        name: &str,
+        path: PathBuf,
         mut preserve: Option<PathBuf>,
+        mut save: impl FnMut(&Path, T) -> crate::Result<()> + Send + 'static,
     ) -> io::Result<Self> {
         let pending = Arc::new(Mutex::new(None::<T>));
         let mailbox = pending.clone();
@@ -88,7 +125,7 @@ impl<T: Serialize + Send + 'static> Writer<T> {
                         }
                     }
                 }
-                if let Err(error) = write(&path, &snapshot) {
+                if let Err(error) = save(&path, snapshot) {
                     tracing::warn!(%error, file = label, "Cannot save state");
                 }
             }

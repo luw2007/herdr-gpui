@@ -216,6 +216,7 @@ fn a_replaced_device_cannot_receive_a_captured_deletion(cx: &mut TestAppContext)
                     id: "ssh:test".into(),
                     host: herdr_client::RemoteHost::Ssh("old.invalid".into()),
                 },
+                session: crate::containers::session_ref("ssh:test", "old"),
             });
             view.endpoints[1].connection.target = ConnectTarget::Ssh {
                 target: "replacement.invalid".into(),
@@ -224,7 +225,7 @@ fn a_replaced_device_cannot_receive_a_captured_deletion(cx: &mut TestAppContext)
             view.submit_session_edit(window, cx);
             assert!(view.menu.error.as_ref().unwrap().contains("changed"));
             assert!(view.sessions.mutation.is_none());
-            let Some(Edit::Delete { row, target }) = view.menu.session_edit.take() else {
+            let Some(Edit::Delete { row, target, .. }) = view.menu.session_edit.take() else {
                 panic!("the rejected confirmation must remain open");
             };
             // The same fence starts at paint, not only at confirmation.

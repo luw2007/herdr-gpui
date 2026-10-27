@@ -90,8 +90,22 @@ pub(crate) enum UiOp {
 pub(crate) enum CommandOp {
     /// A command by its `[keybindings]` name, as the palette runs it.
     Run { name: String },
-    /// Opens the app's Sessions manager with a project-index query.
-    Sessions { query: String },
+    /// Opens the app's Sessions manager with a project-index query and the
+    /// optional Device and Project filters (a device or project reference;
+    /// `unassigned` is the explicit "No project" choice).
+    Sessions {
+        query: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        device: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<String>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        unassigned: bool,
+    },
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// Queries may contain spaces and paths, but stay bounded and printable.

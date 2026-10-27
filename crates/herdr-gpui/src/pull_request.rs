@@ -7,6 +7,7 @@ mod fetch;
 mod lookup;
 mod model;
 mod parse;
+mod resolved;
 mod store;
 
 #[cfg(test)]
@@ -28,6 +29,7 @@ pub(crate) use fetch::{by_number, local_repository, repository_key};
 pub(crate) use model::MergeState;
 #[cfg(any(test, all(feature = "integration-test", target_os = "macos")))]
 pub(crate) use model::fixture;
+pub(crate) use resolved::{Resolved, lookup_resolved};
 
 use fetch::Origins;
 use parse::{parse_graphql, parse_numbered};

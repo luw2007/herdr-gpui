@@ -144,7 +144,7 @@ pub(super) struct Endpoint {
     pub collapsed: bool,
     /// Set on a connection that exists only for one attached session of a
     /// logical Window; device endpoints leave it empty.
-    pub(crate) slot: Option<crate::containers::SessionRef>,
+    pub(crate) slot: Option<herdr_client::SessionRef>,
     pub collapsed_repos: HashSet<String>,
     pub live: LiveState,
     /// Each tab's last frame before `live` moved on, for Go To's preview.
@@ -169,13 +169,18 @@ pub(super) struct Endpoint {
     sounds: crate::sound::Policy,
 }
 
+/// The ID of the endpoint that exists only for `session`.
+pub(crate) fn slot_endpoint_id(session: &herdr_client::SessionRef) -> String {
+    format!("slot:{}:{}", session.device, session.session)
+}
+
 impl Endpoint {
     /// The Herdr session this connection is attached to.
-    pub(crate) fn session_ref(&self) -> crate::containers::SessionRef {
+    pub(crate) fn session_ref(&self) -> herdr_client::SessionRef {
         match &self.slot {
             Some(slot) => slot.clone(),
-            None => crate::containers::SessionRef::new(
-                self.id.clone(),
+            None => crate::containers::session_ref(
+                &self.id,
                 crate::containers::target_session(&self.connection.target),
             ),
         }
@@ -194,11 +199,13 @@ impl Endpoint {
     }
 
     pub(crate) fn device_id(&self) -> &str {
-        self.slot.as_ref().map_or(&self.id, |slot| &slot.device)
+        self.slot
+            .as_ref()
+            .map_or(&self.id, |slot| slot.device.as_str())
     }
 
     /// Whether one of `slots` is this connection's session.
-    pub(crate) fn listed_in(&self, slots: &[crate::containers::SessionRef]) -> bool {
+    pub(crate) fn listed_in(&self, slots: &[herdr_client::SessionRef]) -> bool {
         let session = self.session_ref();
         slots.contains(&session)
     }
@@ -212,6 +219,22 @@ impl Endpoint {
             }
             _ => self.connection.target == *target,
         }
+    }
+
+    /// Stops the connection and keeps it from dialling until [`Self::resume`].
+    pub(crate) fn park(&mut self) {
+        self.stop();
+        self.outage = None;
+        self.detached = true;
+        self.live.status = ConnectionStatus::Detached;
+        if let Ok(mut state) = self.connection.inbox.lock() {
+            *state = self.live.clone();
+        }
+    }
+
+    /// Whether the user stopped this connection and it waits to be chosen.
+    pub(crate) fn is_parked(&self) -> bool {
+        self.detached
     }
 
     /// Dials again a connection that was paused or stopped, as picking its
@@ -503,23 +526,61 @@ impl HerdrWindow {
                 continue;
             };
             let from = self.endpoints[index].session_ref();
-            let to = crate::containers::SessionRef::new(
+            let to = herdr_client::SessionRef::new(
                 from.device.clone(),
                 crate::containers::target_session(&replacement),
             );
             let endpoint = &mut self.endpoints[index];
             endpoint.retarget(replacement);
             if endpoint.slot.is_some() {
+                // The ID names the session; a stale one would collide with
+                // the connection a later attach of the deleted name creates.
+                endpoint.id = slot_endpoint_id(&to);
                 endpoint.slot = Some(to.clone());
             }
             // Every logical Window that listed the deleted session lists the
             // default session of its device instead.
-            self.containers
-                .replace_session(&from.device, &from.session, &to.session);
+            self.container_rewrites.push((
+                from.device.clone(),
+                from.session.clone(),
+                to.session.clone(),
+            ));
+            self.containers_dirty = true;
             selected_changed |= index == self.selected_endpoint;
         }
         self.dedupe_session_endpoints();
+        self.debug_assert_endpoint_ids_unique();
         selected_changed
+    }
+
+    /// Retires every connection to a session the user confirmed for deletion,
+    /// in this window and all others, so none redials the name being deleted
+    /// (other windows pause, this one moves to default), and publishes the
+    /// member replacement to the shared registry at once: a restart must not
+    /// list and redial the deleted session. Returns whether the selected
+    /// endpoint moved; the caller reconnects it.
+    pub(crate) fn retire_session_for_deletion(
+        &mut self,
+        target: &ConnectTarget,
+        current: gpui::WindowId,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        self.pause_session_in_other_windows(target, current, cx);
+        self.retarget_session_in_other_windows(target, current, cx);
+        let selected_moved = self.retarget_session_for_deletion(target);
+        self.containers_changed(cx);
+        selected_moved
+    }
+
+    /// Every endpoint is found by its ID alone (`switch_endpoint`, toasts,
+    /// navigation), so two sharing one would silently select the wrong session.
+    pub(crate) fn endpoint_ids_unique(&self) -> bool {
+        let mut seen = HashSet::new();
+        self.endpoints.iter().all(|e| seen.insert(e.id.as_str()))
+    }
+
+    pub(crate) fn debug_assert_endpoint_ids_unique(&self) {
+        debug_assert!(self.endpoint_ids_unique(), "endpoint IDs must be unique");
     }
 
     /// Two connections to one session never coexist: the first one found keeps
@@ -563,28 +624,36 @@ impl HerdrWindow {
             if !endpoint.talks_to(target) || endpoint.detached {
                 continue;
             }
-            endpoint.stop();
-            endpoint.outage = None;
-            endpoint.detached = true;
-            endpoint.live.status = ConnectionStatus::Detached;
-            if let Ok(mut state) = endpoint.connection.inbox.lock() {
-                *state = endpoint.live.clone();
-            }
+            endpoint.park();
             selected_paused |= index == self.selected_endpoint;
         }
         selected_paused
     }
 
     /// Pause the session in this window and every other Herdr window of the
-    /// app, so none of them dials it again while it is being stopped. The
-    /// window with id `current` is the one mid-update (updating it again would
-    /// re-enter), so it is handled directly and skipped in the enumeration.
+    /// app, so none of them dials it again while it is being stopped, and
+    /// record the stop in the shared registry so a restart does not start the
+    /// session again. The window with id `current` is the one mid-update
+    /// (updating it again would re-enter), so it is handled directly and
+    /// skipped in the enumeration.
     pub(crate) fn pause_session_in_all_windows(
         &mut self,
         target: &ConnectTarget,
         current: gpui::WindowId,
         cx: &mut Context<Self>,
     ) {
+        let stopped: Vec<_> = self
+            .endpoints
+            .iter()
+            .filter(|endpoint| endpoint.talks_to(target))
+            .map(Endpoint::session_ref)
+            .collect();
+        let _ = self.edit_containers(cx, |set| {
+            for session in stopped {
+                set.pause(session);
+            }
+            Ok(())
+        });
         if self.pause_session_endpoints(target) {
             self.reset_selected(cx);
         }
@@ -709,7 +778,7 @@ impl HerdrWindow {
         // What a user or notification navigates to is listed in the current
         // logical Window. A session's own connection is a view choice, not the
         // saved device selection.
-        self.list_selected_session();
+        self.list_selected_session(cx);
         if self.endpoints[self.selected_endpoint].slot.is_none() {
             self.catalog.choose(id);
             if let Some(error) = self.catalog.poll_write() {
@@ -828,8 +897,12 @@ impl HerdrWindow {
         true
     }
 
+    /// Whether terminal input may reach the selected endpoint. An empty
+    /// logical Window shows no terminal, so the session still connected behind
+    /// it is never typed, pasted or dropped into. Every input path (keys, mouse,
+    /// paste, clipboard reservations, drops, held input) asks this.
     pub(super) fn input_ready(&self) -> bool {
-        self.pending_toast.is_none() && self.navigation_ready()
+        !self.container_is_empty() && self.pending_toast.is_none() && self.navigation_ready()
     }
 
     // A coherent surface permits the deferred navigation attempt, not terminal

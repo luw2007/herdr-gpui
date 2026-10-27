@@ -80,6 +80,72 @@ fn show_current() -> ProjectOp {
 }
 
 #[gpui::test]
+fn slot_projects_use_the_catalog_device_and_session_identity(cx: &mut TestAppContext) {
+    let handle = window(cx);
+    handle
+        .update(cx, |view, _, _| {
+            let mut slot = crate::endpoint::Endpoint::new(
+                "slot:local:chosen".into(),
+                view.endpoints[0].label.clone(),
+                ConnectTarget::Session {
+                    name: "stale-target".into(),
+                    development: false,
+                },
+                true,
+            );
+            slot.slot = Some(SessionRef::new(DeviceKey::new("local").unwrap(), "chosen"));
+            view.endpoints.push(slot);
+            view.selected_endpoint = view.endpoints.len() - 1;
+            assert_eq!(endpoint_named(view, &view.endpoints[0].label).unwrap(), 0);
+            assert!(endpoint_named(view, "slot:local:chosen").is_err());
+        })
+        .unwrap();
+    create("Slot project", None, cx);
+    let assigned = ask(
+        ProjectOp::Assign {
+            project: "Slot project".into(),
+            session: None,
+            device: None,
+        },
+        cx,
+    );
+    assert_eq!(
+        message(&assigned),
+        "Assigned session chosen on local to Slot project"
+    );
+    let current = shown(show_current(), cx);
+    assert_eq!(
+        (current.device.as_str(), current.session.as_str()),
+        ("local", "chosen")
+    );
+    let named = shown(
+        ProjectOp::Show {
+            session: Some("chosen".into()),
+            device: Some("local".into()),
+        },
+        cx,
+    );
+    assert_eq!(current.project, named.project);
+    let bound = ask(
+        ProjectOp::Bind {
+            project: "Slot project".into(),
+            path: "/work/slot".into(),
+            device: None,
+        },
+        cx,
+    );
+    assert_eq!(message(&bound), "Bound /work/slot on local to Slot project");
+    let unbound = ask(
+        ProjectOp::Unbind {
+            path: "/work/slot".into(),
+            device: Some("local".into()),
+        },
+        cx,
+    );
+    assert_eq!(message(&unbound), "Unbound /work/slot on local");
+}
+
+#[gpui::test]
 fn projects_are_created_listed_renamed_and_found_by_id_or_name(cx: &mut TestAppContext) {
     let _window = window(cx);
     assert_eq!(listed(cx), (Vec::new(), 0));
@@ -417,6 +483,7 @@ fn show_explains_a_folder_and_a_repository_from_the_scanned_workspaces(cx: &mut 
         branch: None,
         label: None,
         repo: repo.and_then(herdr_client::RepoKey::from_remote_url),
+        ..Default::default()
     };
     let scanned = |cx: &mut TestAppContext, workspaces: Vec<SessionWorkspace>| {
         handle

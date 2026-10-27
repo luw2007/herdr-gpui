@@ -111,11 +111,13 @@ mod repo_items;
 mod review;
 mod scrollback;
 mod search_input;
+mod session_mr;
 mod sessions;
 mod settings_panel;
 mod settings_window;
 #[cfg(unix)]
 mod setup_relay;
+mod shared_state;
 mod sidebar;
 mod smooth_scroll;
 mod sound;

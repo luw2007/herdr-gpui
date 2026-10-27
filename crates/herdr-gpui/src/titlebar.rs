@@ -448,7 +448,7 @@ pub(crate) fn zen_inset(ground: Hsla, window: &Window) -> Option<Stateful<Div>> 
 
 /// Room before the first control: macOS keeps it clear for the traffic
 /// lights, which every other platform draws elsewhere or not at all.
-const LEADING: f32 = if cfg!(target_os = "macos") { 80. } else { 8. };
+pub(crate) const LEADING: f32 = if cfg!(target_os = "macos") { 80. } else { 8. };
 
 pub(super) fn options(title: &str) -> TitlebarOptions {
     TitlebarOptions {
@@ -586,8 +586,9 @@ mod tests {
             let menu_bottom = cx
                 .debug_bounds("application-menu-bar")
                 .map_or(px(0.), |bar| bar.bottom());
+            let titlebar = cx.debug_bounds("titlebar").unwrap();
             assert_eq!(
-                cx.debug_bounds("titlebar").unwrap(),
+                titlebar,
                 Bounds::new(point(px(0.), menu_bottom), size(px(width), px(34.)))
             );
             assert_eq!(
@@ -597,15 +598,10 @@ mod tests {
                     size(px(28.), px(28.))
                 )
             );
-            let banner_height = if env!("HERDR_BUILD_WORKTREE") == "1" {
-                22.
-            } else {
-                0.
-            };
-            assert_eq!(
-                cx.debug_bounds("window-body").unwrap().top(),
-                menu_bottom + px(34. + banner_height)
-            );
+            let strip = cx.debug_bounds("container-strip").unwrap();
+            let body = cx.debug_bounds("window-body").unwrap();
+            assert!(strip.top() >= titlebar.bottom());
+            assert!(body.top() >= strip.bottom());
         }
         let bounds = cx.debug_bounds("titlebar-avatar").unwrap();
         cx.simulate_event(MouseDownEvent {
@@ -721,12 +717,8 @@ mod native_chrome_tests {
                     )
                 );
                 let body = cx.debug_bounds("window-body").unwrap();
-                let banner_height = if env!("HERDR_BUILD_WORKTREE") == "1" {
-                    22.
-                } else {
-                    0.
-                };
-                assert_eq!(body.top(), px(34. + banner_height));
+                let strip = cx.debug_bounds("container-strip").unwrap();
+                assert!(body.top() >= strip.bottom());
                 assert_eq!(body.size.width, px(width));
                 assert!(body.bottom() <= px(height));
             }

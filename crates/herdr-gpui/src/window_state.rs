@@ -117,7 +117,10 @@ impl Global for WindowState {}
 
 impl WindowState {
     /// Called before starting GPUI. Fixtures never call this or install the global.
-    pub(crate) fn load() -> Self {
+    /// `migrated` is the Window each native window showed under the retired
+    /// per-window file, when this launch migrated it; it replaces the file of
+    /// shown ids, which does not exist yet.
+    pub(crate) fn load(migrated: Option<Vec<Option<crate::containers::ContainerId>>>) -> Self {
         let path = crate::preferences::state_dir().map(|dir| dir.join("window-state.json"));
         let restored = path
             .as_ref()
@@ -135,32 +138,36 @@ impl WindowState {
                 None
             }
         });
-        let containers_path =
-            crate::preferences::state_dir().map(|dir| dir.join("window-containers.json"));
-        let sets =
-            containers_path
-                .as_ref()
-                .map_or_else(Vec::new, |path| match containers::read(path) {
-                    Ok(sets) => sets,
-                    Err(error) => {
-                        tracing::warn!(%error, "Cannot restore logical windows");
-                        Vec::new()
-                    }
-                });
-        let container_writer = containers_path.and_then(|path| {
-            match containers::Writer::start("window-containers", path) {
-                Ok(writer) => Some(writer),
-                Err(error) => {
-                    tracing::warn!(%error, "Cannot start logical-window worker");
-                    None
-                }
+        let shown_path = crate::preferences::state_dir().map(|dir| dir.join("window-shown.json"));
+        let shown = match migrated {
+            Some(shown) => shown,
+            None => {
+                shown_path
+                    .as_ref()
+                    .map_or_else(Vec::new, |path| match containers::read(path) {
+                        Ok(shown) => shown,
+                        Err(error) => {
+                            tracing::warn!(%error, "Cannot restore shown windows");
+                            Vec::new()
+                        }
+                    })
             }
-        });
+        };
+        let shown_writer =
+            shown_path.and_then(
+                |path| match containers::Writer::start("window-shown", path) {
+                    Ok(writer) => Some(writer),
+                    Err(error) => {
+                        tracing::warn!(%error, "Cannot start shown-window worker");
+                        None
+                    }
+                },
+            );
         Self {
             restored: restored.into(),
             live: Vec::new(),
             writer,
-            containers: containers::Store::new(sets, container_writer),
+            containers: containers::Store::new(shown, shown_writer),
             quitting: false,
         }
     }
@@ -235,25 +242,25 @@ impl WindowState {
         (geometry.bounds(), display.map(|display| display.id()))
     }
 
-    /// The logical Windows saved for the window `placement` just chose.
-    pub(crate) fn take_containers(cx: &mut App) -> Option<crate::containers::ContainerSet> {
+    /// The Window the native window `placement` just chose showed last time.
+    pub(crate) fn take_shown(cx: &mut App) -> Option<crate::containers::ContainerId> {
         if !cx.has_global::<Self>() {
             return None;
         }
         cx.global_mut::<Self>().containers.take()
     }
 
-    /// Records a native window's logical Windows for the next launch.
-    pub(crate) fn record_containers<T: 'static>(
+    /// Records which Window a native window shows, for the next launch.
+    pub(crate) fn record_shown<T: 'static>(
         id: WindowId,
-        set: &crate::containers::ContainerSet,
+        shown: crate::containers::ContainerId,
         cx: &mut Context<T>,
     ) {
         if !cx.has_global::<Self>() {
             return;
         }
         let state = cx.global_mut::<Self>();
-        if state.quitting || !state.containers.record(id, set) {
+        if state.quitting || !state.containers.record(id, shown) {
             return;
         }
         state.save();

@@ -13,8 +13,40 @@ pub(super) fn container(command: ContainerCommand, context: &Context) -> crate::
     let op = match command {
         ContainerCommand::List => ContainerOp::List,
         ContainerCommand::New { title } => ContainerOp::New { title },
-        ContainerCommand::Focus { id } => ContainerOp::Focus { id },
-        ContainerCommand::Attach { session, device } => ContainerOp::Attach { session, device },
+        ContainerCommand::Focus { window } => ContainerOp::Focus { window },
+        ContainerCommand::Rename { window, title } => ContainerOp::Rename { window, title },
+        ContainerCommand::Close { window } => ContainerOp::Close { window },
+        ContainerCommand::Move { window, position } => ContainerOp::Move { window, position },
+        ContainerCommand::MoveSession {
+            session,
+            device,
+            window,
+            position,
+        } => ContainerOp::MoveSession {
+            session,
+            device,
+            window,
+            position,
+        },
+        ContainerCommand::Group { window, by } => ContainerOp::Group { window, by },
+        ContainerCommand::Attach {
+            session,
+            device,
+            window,
+        } => ContainerOp::Attach {
+            session,
+            device,
+            window,
+        },
+        ContainerCommand::Detach {
+            session,
+            device,
+            window,
+        } => ContainerOp::Detach {
+            session,
+            device,
+            window,
+        },
     };
     match context.call(Request::Container, op)? {
         Response::Done { message } => Ok(Output::message(message)),
@@ -25,10 +57,11 @@ pub(super) fn container(command: ContainerCommand, context: &Context) -> crate::
             for container in &containers {
                 let _ = writeln!(
                     text,
-                    "{}{} {}",
+                    "{}{} {} ({})",
                     if container.active { "*" } else { " " },
                     container.id,
-                    container.title
+                    container.title,
+                    container.grouping
                 );
                 for slot in &container.sessions {
                     let _ = writeln!(
@@ -38,6 +71,13 @@ pub(super) fn container(command: ContainerCommand, context: &Context) -> crate::
                         slot.session,
                         slot.device,
                         slot.status
+                    );
+                }
+                if container.sessions_total > container.sessions.len() {
+                    let _ = writeln!(
+                        text,
+                        "    ... {} more not listed; the answer is cut to fit",
+                        container.sessions_total - container.sessions.len()
                     );
                 }
             }

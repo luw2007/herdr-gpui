@@ -2,6 +2,9 @@
 mod text;
 
 #[cfg(test)]
+mod manage;
+
+#[cfg(test)]
 mod tests;
 
 use super::{Context, Output, unexpected};
@@ -14,8 +17,17 @@ use crate::{
 };
 
 pub(super) fn run(command: ProjectCommand, context: &Context) -> crate::Result<Output> {
-    let op = match command {
+    match context.call(Request::Project, operation(command))? {
+        Response::Done { message } => Ok(Output::message(message)),
+        Response::Project { reply } => output(&reply),
+        response => Err(unexpected(response)),
+    }
+}
+
+fn operation(command: ProjectCommand) -> ProjectOp {
+    match command {
         ProjectCommand::List => ProjectOp::List,
+        ProjectCommand::Manage => ProjectOp::Manage {},
         ProjectCommand::Create { name, repo } => ProjectOp::Create { name, repo },
         ProjectCommand::Rename { project, name } => ProjectOp::Rename { project, name },
         ProjectCommand::Bind {
@@ -40,11 +52,6 @@ pub(super) fn run(command: ProjectCommand, context: &Context) -> crate::Result<O
         ProjectCommand::Unassign { session, device } => ProjectOp::Unassign { session, device },
         ProjectCommand::Show { session, device } => ProjectOp::Show { session, device },
         ProjectCommand::Delete { project } => ProjectOp::Delete { project },
-    };
-    match context.call(Request::Project, op)? {
-        Response::Done { message } => Ok(Output::message(message)),
-        Response::Project { reply } => output(&reply),
-        response => Err(unexpected(response)),
     }
 }
 

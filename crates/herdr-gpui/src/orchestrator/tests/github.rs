@@ -92,3 +92,34 @@ fn a_response_without_the_connection_is_a_typed_error() {
         Err(Error::Output { .. })
     ));
 }
+
+#[gpui::test]
+fn a_detached_view_on_an_attached_session_uses_its_devices_github_account(
+    cx: &mut gpui::TestAppContext,
+) {
+    const HOST: &str = "ssh:0123456789abcdef0123456789abcdef";
+    let (view, cx) = cx.add_window_view(crate::sidebar::layout_tests::fixture_window);
+    view.update(cx, |view, _| {
+        view.menu.github = crate::github::Auth::connected_fixture();
+        let mut work = crate::github::Auth::connected_fixture();
+        work.profile.as_mut().unwrap().login = "work-user".into();
+        view.menu.github_hosts.insert(HOST.into(), work);
+        let target = herdr_client::ConnectTarget::Ssh {
+            target: "me@work".into(),
+            session: "work".into(),
+        };
+        let mut slot = crate::endpoint::Endpoint::new(
+            format!("slot:{HOST}:work"),
+            "Work box".into(),
+            target.clone(),
+            true,
+        );
+        slot.slot = Some(herdr_client::SessionRef::new(
+            herdr_client::DeviceKey::new(HOST).unwrap(),
+            "work",
+        ));
+        view.endpoints.push(slot);
+        let (_, login) = view.github_account(&target);
+        assert_eq!(login.as_deref(), Some("work-user"));
+    });
+}

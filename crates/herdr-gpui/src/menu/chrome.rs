@@ -227,29 +227,77 @@ impl HerdrWindow {
         let above = room(self.menu.anchor.y - px(12. + MENU_MARGIN) - chrome);
         let below = room(viewport.height - self.menu.anchor.y - px(12. + MENU_MARGIN));
         let list = matches!(page, Page::Devices | Page::Sessions);
-        let width = if page == Page::Sessions {
-            super::sessions::SESSIONS_WIDTH
-        } else if list {
+        if page == Page::Sessions && self.sessions_expanded() {
+            // Page-sized: the whole window under the title bar, up to a width
+            // a line of session context still reads in.
+            return panel
+                .absolute()
+                .top(chrome + px(MENU_MARGIN))
+                .bottom(px(MENU_MARGIN))
+                .left(px(MENU_MARGIN))
+                .w((viewport.width - px(2. * MENU_MARGIN))
+                    .max(px(0.))
+                    .min(px(super::sessions::EXPANDED_WIDTH)))
+                .flex()
+                .flex_col()
+                .min_h_0();
+        }
+        if page == Page::Sessions {
+            // The strip opens near the top; the sidebar footer opens near the
+            // bottom. Size the panel from the same edges used to place it, not
+            // from a footer-only estimate or a minimum larger than the viewport.
+            let top = (chrome + px(MENU_MARGIN)).min(viewport.height);
+            let bottom = (viewport.height - px(MENU_MARGIN)).max(top);
+            let above_bottom =
+                (self.menu.anchor.y - px(super::devices::MENU_GAP)).clamp(top, bottom);
+            let below_top = (self.menu.anchor.y + px(12.)).clamp(top, bottom);
+            let above = above_bottom - top;
+            let below = bottom - below_top;
+            let width = px(super::sessions::SESSIONS_WIDTH)
+                .min((viewport.width - px(2. * MENU_MARGIN)).max(px(0.)));
+            let margin = px(MENU_MARGIN).min(viewport.width);
+            let left = self
+                .menu
+                .anchor
+                .x
+                .clamp(margin, (viewport.width - width - margin).max(margin));
+            let panel = panel
+                .absolute()
+                .left(left)
+                .w(width)
+                .flex()
+                .flex_col()
+                .min_h_0()
+                // A definite height lets flex distribute the available room
+                // between the toolbar, facet scroller and session scroller.
+                // max-height alone sizes from overflowing row content first.
+                .h(above.max(below).min(
+                    px(552.)
+                        + if self.session_facet_open() {
+                            self.facet_room() + px(self.config.ui.line_height() * 3.)
+                        } else {
+                            px(0.)
+                        },
+                ));
+            return if above >= below {
+                panel.bottom(viewport.height - above_bottom).max_h(above)
+            } else {
+                panel.top(below_top).max_h(below)
+            };
+        }
+        let width = if list {
             super::devices::MENU_WIDTH
         } else {
             180.
         };
         let left = match page {
             Page::Devices => self.menu.anchor.x,
-            Page::Sessions => self
-                .menu
-                .anchor
-                .x
-                .min((viewport.width - px(width + MENU_MARGIN)).max(px(0.))),
             _ => px(56.),
         };
         let panel = panel
             .absolute()
             .left(left)
             .w(px(width).min((viewport.width - px(16.)).max(px(0.))));
-        let panel = panel.when(page == Page::Sessions, |panel| {
-            panel.flex().flex_col().min_h_0()
-        });
         if above >= below {
             panel
                 .bottom(

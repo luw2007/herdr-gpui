@@ -3,6 +3,7 @@
 
 mod agents;
 mod cell;
+mod grouping;
 mod host_row;
 mod hover;
 mod layout;
@@ -42,6 +43,8 @@ pub(crate) use {
     view::SidebarView,
     workspaces::workspace_label,
 };
+
+pub(crate) use grouping::State as GroupingState;
 
 pub(crate) use order::step as sidebar_step;
 

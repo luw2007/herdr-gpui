@@ -372,6 +372,7 @@ impl HerdrWindow {
                 | Command::Settings
                 | Command::Keybinds
                 | Command::Sessions
+                | Command::ProjectManager
                 | Command::Themes
                 | Command::Palette
                 | Command::ResumePalette

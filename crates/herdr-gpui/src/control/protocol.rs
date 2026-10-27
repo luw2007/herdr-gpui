@@ -16,8 +16,10 @@ use serde::{Deserialize, Serialize};
 
 /// Raised whenever a request or reply changes shape, so `status` can tell
 /// an outdated app from a refused request. 4: queried Sessions manager.
-/// 5: projects. 6: logical Windows (`container`).
-pub(crate) const PROTOCOL_VERSION: u32 = 6;
+/// 5: projects. 6: logical Windows (`container`). 7: Windows managed by name.
+/// 8: `sessions` Device and Project filters. 9: `container list` reports
+/// `sessions_total` and cuts a long list to a byte budget.
+pub(crate) const PROTOCOL_VERSION: u32 = 9;
 
 /// Older apps and clients know only tabs, so a tab is left off the wire.
 fn is_tab(placement: &Placement) -> bool {
@@ -413,10 +415,39 @@ mod tests {
             ContainerOp::New {
                 title: Some("Build".into()),
             },
-            ContainerOp::Focus { id: 2 },
+            ContainerOp::Focus {
+                window: "Build".into(),
+            },
+            ContainerOp::Rename {
+                window: "Build".into(),
+                title: "Ship".into(),
+            },
+            ContainerOp::Close {
+                window: "Ship".into(),
+            },
+            ContainerOp::Move {
+                window: "Ship".into(),
+                position: 1,
+            },
+            ContainerOp::Group {
+                window: "Ship".into(),
+                by: "project".into(),
+            },
+            ContainerOp::MoveSession {
+                session: "work".into(),
+                device: None,
+                window: None,
+                position: 2,
+            },
+            ContainerOp::Detach {
+                session: "work".into(),
+                device: None,
+                window: Some("Ship".into()),
+            },
             ContainerOp::Attach {
                 session: "work".into(),
                 device: Some("ssh:box".into()),
+                window: None,
             },
         ] {
             let request = Request::Container(Call {
@@ -430,8 +461,9 @@ mod tests {
         let response = Response::Container {
             reply: Reply::Containers {
                 containers: vec![ContainerInfo {
-                    id: 1,
+                    id: "7a8f3b0e-6a52-4c6e-9d57-0b6f1a9f7d11".into(),
                     title: "Window 1".into(),
+                    grouping: "none".into(),
                     active: true,
                     sessions: vec![SlotInfo {
                         device: "local".into(),
@@ -439,6 +471,7 @@ mod tests {
                         selected: true,
                         status: "online".into(),
                     }],
+                    sessions_total: 1,
                 }],
             },
         };

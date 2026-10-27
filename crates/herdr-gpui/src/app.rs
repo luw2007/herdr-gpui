@@ -121,7 +121,7 @@ fn open_window_placed(
         bounds.origin += point(step, step);
         crate::window_state::WindowState::placement(bounds, cx)
     });
-    let containers = crate::window_state::WindowState::take_containers(cx);
+    let shown = crate::window_state::WindowState::take_shown(cx);
     cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -142,9 +142,7 @@ fn open_window_placed(
                     fixture,
                 );
                 view.updater = updater;
-                if let Some(set) = containers {
-                    view.install_containers(set);
-                }
+                view.install_shown(shown);
                 crate::window_state::WindowState::observe(window, cx);
                 view.containers_changed(cx);
                 view
@@ -312,7 +310,17 @@ pub(crate) fn run() -> std::process::ExitCode {
         }
     };
     let failed = startup_failed.clone();
-    let window_state = (mode == LaunchMode::Normal).then(crate::window_state::WindowState::load);
+    // Nor with the user's Windows, which they would overwrite. Loading comes
+    // first: it may migrate the retired per-window file, whose shown Windows
+    // seed the window state.
+    let mut windows = if mode == LaunchMode::Normal {
+        crate::containers::Containers::load()
+    } else {
+        crate::containers::Containers::default()
+    };
+    let migrated_shown = windows.take_migrated_shown();
+    let window_state = (mode == LaunchMode::Normal)
+        .then(|| crate::window_state::WindowState::load(migrated_shown));
     // Fixtures never ask about, or touch, agent configuration.
     let agent_skill = if mode == LaunchMode::Normal {
         crate::agent_skill::AgentSkill::load()
@@ -374,6 +382,7 @@ pub(crate) fn run() -> std::process::ExitCode {
             palette_frecency.install(cx);
             dispatch_history.install(cx);
             projects.install(cx);
+            windows.install(cx);
             agent_skill.install_global(cx);
             keychain_grants.install(cx);
             // Only the user's own app answers agents; native test modes stay private.

@@ -379,7 +379,7 @@ impl HerdrWindow {
         let shown = self
             .endpoints
             .get(self.selected_endpoint)
-            .is_some_and(|endpoint| endpoint.id == host.id);
+            .is_some_and(|endpoint| endpoint.device_id() == host.id);
         let header = div()
             .flex_none()
             .p(px(16.))

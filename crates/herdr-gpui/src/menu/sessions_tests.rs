@@ -3,7 +3,6 @@
 
 #![allow(clippy::unwrap_used)]
 
-use crate::containers::SessionRef;
 use crate::{
     endpoint::LOCAL,
     menu::Page,
@@ -12,10 +11,16 @@ use crate::{
 use gpui::{Bounds, Entity, Modifiers, Pixels, TestAppContext, VisualTestContext, px, size};
 use herdr_client::{ConnectTarget, LocalSession, SessionState};
 
+mod anchor_layout;
 // Adding a session needs SSH, which Windows does not offer.
+mod facet_limits;
+mod facets;
 #[cfg(not(windows))]
 mod form_scroll;
 mod input_bounds;
+mod mr;
+mod project_entries;
+mod project_management;
 mod projects;
 mod search;
 
@@ -63,15 +68,15 @@ pub(super) fn draw(cx: &mut VisualTestContext) {
 
 /// What the window shows after a choice: the session on screen, and whether
 /// the current logical Window lists `device`'s `session`.
-fn shown(view: &crate::HerdrWindow) -> SessionRef {
+fn shown(view: &crate::HerdrWindow) -> herdr_client::SessionRef {
     view.endpoints[view.selected_endpoint].session_ref()
 }
 
 fn listed(view: &crate::HerdrWindow, device: &str, session: &str) -> bool {
     view.containers
         .active()
-        .slots
-        .contains(&SessionRef::new(device, session))
+        .members
+        .contains(&crate::containers::session_ref(device, session))
 }
 
 fn click(cx: &mut VisualTestContext, selector: &'static str) {
@@ -89,7 +94,7 @@ pub(super) fn open_list(
         let mut view = fixture_window(window, cx);
         view.endpoints[0].connection.target = current;
         view.sessions.entries = entries;
-        view.containers = crate::containers::ContainerSet::new(view.endpoints[0].session_ref());
+        view.containers = crate::containers::ContainerView::local(&view.endpoints[0].session_ref());
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
@@ -232,7 +237,7 @@ fn on_the_first_device(
         }
         // The window is attached to the first saved device.
         view.selected_endpoint = 1;
-        view.containers = crate::containers::ContainerSet::new(view.endpoints[1].session_ref());
+        view.containers = crate::containers::ContainerView::local(&view.endpoints[1].session_ref());
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
@@ -274,7 +279,10 @@ fn choosing_another_session_of_the_device_it_is_on_adds_a_row_beside_it(cx: &mut
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.menu.page, None, "choosing closes the list");
-        assert_eq!(shown(view), SessionRef::new("ssh:build", "agents"));
+        assert_eq!(
+            shown(view),
+            crate::containers::session_ref("ssh:build", "agents")
+        );
         assert!(
             listed(view, "ssh:build", "default"),
             "both sessions coexist"
@@ -522,7 +530,7 @@ fn choosing_a_local_session_attaches_it_beside_the_current_one(cx: &mut TestAppC
         assert_eq!(view.menu.page, None, "choosing closes the list");
         assert!(listed(view, LOCAL, "default"), "the first session stays");
         assert!(listed(view, LOCAL, "work"), "the chosen one joins it");
-        assert_eq!(shown(view), SessionRef::new(LOCAL, "work"));
+        assert_eq!(shown(view), crate::containers::session_ref(LOCAL, "work"));
         assert_eq!(
             view.endpoints[0].connection.target,
             development("default"),
@@ -562,11 +570,27 @@ fn choosing_a_local_session_leaves_a_remote_endpoint(cx: &mut TestAppContext) {
     // The device's session and Add row precede the two local sessions and Add.
     assert!(cx.debug_bounds("sessions-row-4").is_some());
     assert!(cx.debug_bounds("sessions-row-5").is_none());
+    // Debug bounds also include clipped rows. Bring this target into the
+    // scroller before clicking so a long device section cannot send the click
+    // through the menu to the sidebar underneath it.
+    let row = bounds(cx, "sessions-row-3");
+    let list = bounds(cx, "sessions-list");
+    if row.bottom() > list.bottom() || row.top() < list.top() {
+        cx.simulate_event(gpui::ScrollWheelEvent {
+            position: list.center(),
+            delta: gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-10000.))),
+            ..Default::default()
+        });
+        draw(cx);
+    }
+    let row = bounds(cx, "sessions-row-3");
+    let list = bounds(cx, "sessions-list");
+    assert!(row.top() >= list.top() && row.bottom() <= list.bottom());
     click(cx, "sessions-row-3");
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.menu.page, None, "choosing closes the list");
-        assert_eq!(shown(view), SessionRef::new(LOCAL, "work"));
+        assert_eq!(shown(view), crate::containers::session_ref(LOCAL, "work"));
         assert!(listed(view, "ssh:fixture", "default"), "the device stays");
         assert!(listed(view, LOCAL, "work"));
         assert_eq!(
@@ -609,7 +633,7 @@ fn keys_walk_the_rows_and_enter_chooses(cx: &mut TestAppContext) {
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.menu.page, None);
-        assert_eq!(shown(view), SessionRef::new(LOCAL, "work"));
+        assert_eq!(shown(view), crate::containers::session_ref(LOCAL, "work"));
         assert!(listed(view, LOCAL, "default") && listed(view, LOCAL, "work"));
         assert_eq!(view.endpoints[0].connection.target, development("default"));
     });
@@ -767,7 +791,10 @@ fn choosing_a_remote_row_selects_that_device(cx: &mut TestAppContext) {
     cx.update(|_, cx| {
         let view = view.read(cx);
         assert_eq!(view.selected_endpoint, 1, "the device became current");
-        assert_eq!(shown(view), SessionRef::new("ssh:fixture", "default"));
+        assert_eq!(
+            shown(view),
+            crate::containers::session_ref("ssh:fixture", "default")
+        );
         assert_eq!(view.menu.page, None);
     });
 }

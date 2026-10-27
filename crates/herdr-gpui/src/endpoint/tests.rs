@@ -316,7 +316,16 @@ fn catalog_preserves_order_labels_and_scoped_collapse_but_retires_changed_target
         let epoch = view.selection_epoch;
         renamed.session = "changed".into();
         view.reconcile_catalog(vec![host("a", true), renamed], Vec::new(), cx);
-        assert_eq!(view.selected_endpoint, 0);
+        // The shown member is chosen again on the rebuilt connection instead
+        // of the screen silently falling back to Local.
+        assert_eq!(
+            view.endpoints[view.selected_endpoint].session_ref(),
+            crate::containers::session_ref("ssh:b", "default")
+        );
+        assert_eq!(
+            view.containers.active().selected.as_ref(),
+            Some(&view.endpoints[view.selected_endpoint].session_ref())
+        );
         assert!(view.selection_epoch > epoch);
         assert!(!Arc::ptr_eq(&inbox, &view.endpoints[2].connection.inbox));
         view.select_endpoint("ssh:a", cx);
@@ -334,7 +343,7 @@ fn an_attached_session_survives_catalog_reconciliation(cx: &mut gpui::TestAppCon
     view.update(cx, |view, cx| {
         view.reconcile_catalog(vec![host("b", true)], Vec::new(), cx);
         assert!(view.select_endpoint("ssh:b", cx));
-        view.attach_session(crate::containers::SessionRef::new("ssh:b", "other"), cx);
+        view.attach_session(crate::containers::session_ref("ssh:b", "other"), cx);
         assert!(matches!(
             &view.endpoints[1].connection.target,
             ConnectTarget::Ssh { session, .. } if session == "default"

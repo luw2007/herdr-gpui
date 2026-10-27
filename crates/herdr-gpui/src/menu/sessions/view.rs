@@ -2,7 +2,9 @@
 //! session the selection is pinned to. Selection is pinned by identity because
 //! the list is rebuilt by asynchronous scans, and an ordinal would slide onto a
 //! different session whenever a row appeared or went away above it.
-use super::{Entry, Filter, Page, Row};
+#[cfg(unix)]
+use super::catalog::Facets;
+use super::{Entry, Facet, Filter, Page, Row, catalog::Scope};
 use crate::{
     HerdrWindow,
     search_input::{Changed, SearchInput},
@@ -11,7 +13,12 @@ use gpui::{prelude::*, *};
 
 pub(in crate::menu) struct View {
     pub(super) search: Entity<SearchInput>,
-    pub(super) filter: Filter,
+    /// Run state and the explicit device and project filters.
+    pub(super) scope: Scope,
+    /// Whether the manager paints at page size rather than as a popover.
+    pub(super) expanded: bool,
+    /// The facet whose choices are listed under the toolbar.
+    pub(super) facet_open: Option<Facet>,
     /// The search text as of the last edit, so building the list never reads
     /// the entity.
     pub(super) query: String,
@@ -68,7 +75,9 @@ impl HerdrWindow {
         window.focus(&search.read(cx).focus.clone(), cx);
         self.menu.sessions_view = Some(View {
             search,
-            filter: Filter::All,
+            scope: Scope::default(),
+            expanded: false,
+            facet_open: None,
             query: String::new(),
             pinned: None,
             page: 0,
@@ -85,11 +94,22 @@ impl HerdrWindow {
     }
 
     pub(super) fn set_session_filter(&mut self, filter: Filter, cx: &mut Context<Self>) {
+        self.change_scope(|scope| scope.filter = filter, cx);
+    }
+
+    /// Apply `change` to the scope; a scope that really changed starts the list
+    /// again from its first match.
+    pub(in crate::menu) fn change_scope(
+        &mut self,
+        change: impl FnOnce(&mut Scope),
+        cx: &mut Context<Self>,
+    ) {
         if let Some(view) = &mut self.menu.sessions_view {
-            if view.filter == filter {
+            let before = view.scope.clone();
+            change(&mut view.scope);
+            if view.scope == before {
                 return;
             }
-            view.filter = filter;
         }
         self.reselect_first_session();
         cx.notify();
@@ -144,7 +164,7 @@ impl HerdrWindow {
             view.pinned = row;
         }
     }
-    pub(super) fn session_page(&self) -> usize {
+    pub(in crate::menu) fn session_page(&self) -> usize {
         self.menu.sessions_view.as_ref().map_or(0, |view| view.page)
     }
 
@@ -176,10 +196,51 @@ impl HerdrWindow {
     }
 
     pub(super) fn session_filter(&self) -> Filter {
+        self.session_scope().filter
+    }
+
+    pub(in crate::menu) fn sessions_expanded(&self) -> bool {
         self.menu
             .sessions_view
             .as_ref()
-            .map_or(Filter::All, |view| view.filter)
+            .is_some_and(|view| view.expanded)
+    }
+
+    pub(super) fn toggle_sessions_expanded(&mut self, cx: &mut Context<Self>) {
+        if let Some(view) = &mut self.menu.sessions_view {
+            view.expanded = !view.expanded;
+        }
+        cx.notify();
+    }
+
+    pub(in crate::menu) fn session_facet_open(&self) -> bool {
+        self.menu
+            .sessions_view
+            .as_ref()
+            .is_some_and(|view| view.facet_open.is_some())
+    }
+    pub(in crate::menu) fn session_scope(&self) -> Scope {
+        self.menu
+            .sessions_view
+            .as_ref()
+            .map(|view| view.scope.clone())
+            .unwrap_or_default()
+    }
+
+    /// Open the manager with `query` typed and `facets` chosen, as
+    /// `herdr-gpui sessions` asks.
+    #[cfg(unix)]
+    pub(crate) fn open_sessions_filtered(
+        &mut self,
+        query: &str,
+        facets: Facets,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_sessions_with_query(query, window, cx);
+        if self.menu.page == Some(Page::Sessions) {
+            self.change_scope(|scope| scope.facets = facets, cx);
+        }
     }
 
     pub(super) fn session_query(&self) -> &str {
@@ -192,7 +253,8 @@ impl HerdrWindow {
     /// Search bar and the three run-state filters above the list.
     pub(super) fn render_session_toolbar(&self, cx: &mut Context<Self>) -> Div {
         let theme = &self.theme;
-        let mut filters = div().flex().gap(px(4.)).items_center();
+        let mut filters = div().flex().flex_wrap().gap(px(4.)).items_center();
+        let expanded = self.sessions_expanded();
         let current = self.session_filter();
         for filter in Filter::EACH {
             filters = filters.child(
@@ -216,8 +278,46 @@ impl HerdrWindow {
                     })),
             );
         }
+        filters = filters
+            .child(
+                div()
+                    .id("sessions-new-project")
+                    .debug_selector(|| "sessions-new-project".into())
+                    .px(px(8.))
+                    .py(px(2.))
+                    .rounded(px(crate::config::corners::CONTROL))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(rgb(theme.active)))
+                    .text_color(rgb(theme.muted))
+                    .child("New project…")
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        // The form owns the keyboard: its name field is focused
+                        // by `open_project_create`, and taking focus back to the
+                        // search here would swallow the typed name.
+                        this.open_project_create(None, window, cx);
+                    })),
+            )
+            .child(
+                div()
+                    .id("sessions-expand")
+                    .debug_selector(|| "sessions-expand".into())
+                    .ml_auto()
+                    .px(px(8.))
+                    .py(px(2.))
+                    .rounded(px(crate::config::corners::CONTROL))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(rgb(theme.active)))
+                    .text_color(rgb(theme.muted))
+                    .child(if expanded { "Compact" } else { "Expand" })
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.toggle_sessions_expanded(cx);
+                        this.focus_session_search(window, cx);
+                    })),
+            );
+        // The toolbar yields to the sessions below it: only the open facet's
+        // scroller can shrink, so a short window squeezes the choices first.
         let mut bar = div()
-            .flex_none()
+            .min_h_0()
             .flex()
             .flex_col()
             .gap(px(6.))
@@ -232,7 +332,7 @@ impl HerdrWindow {
         }
         let (_, pages) = self.session_page_entries();
         let page = self.session_page().min(pages - 1);
-        let mut bar = bar.child(filters);
+        let mut bar = bar.child(filters).children(self.render_session_facets(cx));
         if pages > 1 {
             let step = |label: &'static str, selector: &'static str, target: Option<usize>| {
                 div()

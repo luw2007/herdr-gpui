@@ -55,6 +55,8 @@ pub enum Command {
     Settings,
     Keybinds,
     Sessions,
+    /// The Sessions manager's project records and device-folder bindings.
+    ProjectManager,
     Themes,
     WorkspacePicker,
     Palette,
@@ -588,6 +590,11 @@ pub const COMMANDS: &[CommandInfo] = &[
         label: "Sessions",
     },
     CommandInfo {
+        command: Command::ProjectManager,
+        name: "project_manager",
+        label: "Projects",
+    },
+    CommandInfo {
         command: Command::Themes,
         name: "themes",
         label: "Themes",
@@ -837,6 +844,7 @@ pub fn request(command: Command, snapshot: &ClientShellSnapshot) -> Option<(Meth
         | Command::Settings
         | Command::Keybinds
         | Command::Sessions
+        | Command::ProjectManager
         | Command::Themes
         | Command::WorkspacePicker
         | Command::Palette

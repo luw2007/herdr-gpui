@@ -150,19 +150,13 @@ impl Devices {
     /// window may ask. Reports whether the popup should repaint. Opening the
     /// popup does not reset these ages: a host asked a moment ago is still
     /// inside its own interval.
-    pub(super) fn poll(
-        &mut self,
-        targets: &[(String, RemoteHost)],
-        open: bool,
-        now: Instant,
-    ) -> bool {
-        self.poll_with(targets, open, now, RemoteHost::list_sessions)
+    pub(super) fn poll(&mut self, targets: &[(String, RemoteHost)], now: Instant) -> bool {
+        self.poll_with(targets, now, RemoteHost::list_sessions)
     }
 
     fn poll_with(
         &mut self,
         targets: &[(String, RemoteHost)],
-        open: bool,
         now: Instant,
         probe: impl Fn(&RemoteHost) -> Result<Vec<RemoteSession>, herdr_client::Error>
         + Send
@@ -204,8 +198,7 @@ impl Devices {
             }
             Some(Err(mpsc::TryRecvError::Empty)) | None => {}
         }
-        if open
-            && self.pending.is_none()
+        if self.pending.is_none()
             && targets
                 .iter()
                 .any(|(id, host)| stale(&self.asked, id, host, now))
@@ -220,7 +213,6 @@ impl Devices {
         }
         changed
     }
-
     /// Forget a device's answer and its age when it is no longer one of this
     /// window's devices, or when its host changed under the same id.
     pub(super) fn forget_replaced(&mut self, targets: &[(String, RemoteHost)]) {
@@ -313,17 +305,18 @@ fn probe_all(
 }
 
 impl Sessions {
-    /// Apply a finished scan, and start one when the popup is open and its
-    /// results have aged out. Reports whether the popup should repaint.
-    pub(super) fn poll(&mut self, development: bool, open: bool, now: Instant) -> bool {
-        self.poll_with(open, now, move || {
+    /// Apply a finished scan, and start one when the previous result has aged
+    /// out. Runs on the window's own cadence whether or not the Sessions
+    /// popup is open, so project discovery sees saved sessions in the
+    /// background. Reports whether anything changed.
+    pub(super) fn poll(&mut self, development: bool, now: Instant) -> bool {
+        self.poll_with(now, move || {
             list_local_sessions(development).map_err(Error::from)
         })
     }
 
     fn poll_with(
         &mut self,
-        open: bool,
         now: Instant,
         scan: impl FnOnce() -> Result<Vec<LocalSession>, Error> + Send + 'static,
     ) -> bool {
@@ -365,7 +358,7 @@ impl Sessions {
             }
             Some(Err(mpsc::TryRecvError::Empty)) | None => {}
         }
-        if open && self.pending.is_none() && self.next_scan.is_none_or(|at| now >= at) {
+        if self.pending.is_none() && self.next_scan.is_none_or(|at| now >= at) {
             self.start(now, scan);
             changed = true;
         }

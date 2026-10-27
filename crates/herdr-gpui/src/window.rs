@@ -9,6 +9,7 @@ mod backdrop;
 mod clipboard;
 mod commands;
 mod config_diagnostic;
+mod container_menu;
 mod container_strip;
 mod containers;
 mod copy_mode;
@@ -117,12 +118,16 @@ pub(crate) struct HerdrWindow {
     pub(crate) config_watch: Option<Task<()>>,
     pub(crate) config_load_revision: u64,
     pub(crate) endpoints: Vec<endpoint::Endpoint>,
-    /// This native window's logical Windows and the sessions each lists.
-    pub(crate) containers: crate::containers::ContainerSet,
+    /// This native window's copy of the global Windows and which one it shows.
+    pub(crate) containers: crate::containers::ContainerView,
+    /// Session renames (a deleted session's default) not yet in the registry.
+    pub(crate) container_rewrites: Vec<(herdr_client::DeviceKey, String, String)>,
     /// A selection restored from disk, applied once its connection is up.
     pub(crate) container_restore_pending: bool,
     /// Membership changed where no context was at hand to publish it.
     pub(crate) containers_dirty: bool,
+    /// The open menu of a Window tab, if any.
+    pub(crate) container_menu: Option<container_menu::ContainerMenu>,
     pub(crate) window_id: WindowId,
     pub(crate) selected_endpoint: usize,
     pub(crate) selection_epoch: u64,
@@ -319,6 +324,8 @@ pub(crate) struct HerdrWindow {
     /// under the pinned host header if it landed there.
     pub(crate) sidebar_pin_reveal: std::cell::Cell<Option<usize>>,
     pub(crate) sidebar_search: sidebar::SidebarSearch,
+    /// Sidebar grouping: the cached session context and the folded groups.
+    pub(crate) grouping: sidebar::GroupingState,
     pub(crate) _poll: Task<()>,
     pub(crate) _activation: Subscription,
     pub(crate) _appearance: Subscription,
@@ -522,6 +529,7 @@ impl HerdrWindow {
         self.poll_remote_browser(window, cx);
         self.offer_browser_skill(window, cx);
         self.poll_sessions(cx);
+        self.poll_grouping(cx);
         self.flush_scrollbar(cx);
         self.flush_split(cx);
         self.poll_find(window, cx);
@@ -669,10 +677,14 @@ impl HerdrWindow {
             catalog: endpoint::Catalog::new(&target),
             sessions: sessions::Sessions::default(),
             sessions_anchor: Default::default(),
-            containers: crate::containers::ContainerSet::new(crate::containers::SessionRef::new(
-                endpoint::LOCAL,
-                crate::containers::target_session(&target),
-            )),
+            containers: crate::containers::ContainerView::open(
+                &crate::containers::session_ref(
+                    endpoint::LOCAL,
+                    crate::containers::target_session(&target),
+                ),
+                cx,
+            ),
+            container_rewrites: Vec::new(),
             endpoints: vec![endpoint::Endpoint::new(
                 endpoint::LOCAL.into(),
                 "Local".into(),
@@ -773,6 +785,7 @@ impl HerdrWindow {
             sidebar_start_pending: true,
             container_restore_pending: false,
             containers_dirty: false,
+            container_menu: None,
             window_id: window.window_handle().window_id(),
             device_filter: None,
             wheel: WheelAccumulator::default(),
@@ -793,6 +806,7 @@ impl HerdrWindow {
             sidebar_revealed: Default::default(),
             sidebar_pin_reveal: Default::default(),
             sidebar_search: sidebar::SidebarSearch::new(cx),
+            grouping: Default::default(),
             _poll: poll,
             sidebar_view,
             surface_signal: cx.new(|_| SurfaceSignal),

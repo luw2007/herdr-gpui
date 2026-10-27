@@ -18,6 +18,11 @@ pub struct Registry {
     /// `(device, normalized path)` to the project that folder belongs to.
     pub(super) bindings: BTreeMap<(DeviceKey, String), ProjectId>,
     pub(super) assignments: BTreeMap<SessionRef, ProjectId>,
+    /// The same shape as [`Self::bindings`], but the inferences
+    /// [`Registry::discover`] made from unbound non-git workspaces. Kept
+    /// apart so resolve prefers manual bindings and a manual binding of a
+    /// folder can simply shadow the inference.
+    pub(super) inferred: BTreeMap<(DeviceKey, String), ProjectId>,
 }
 
 fn same_name(a: &str, b: &str) -> bool {
@@ -34,7 +39,10 @@ impl Registry {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.projects.is_empty() && self.bindings.is_empty() && self.assignments.is_empty()
+        self.projects.is_empty()
+            && self.bindings.is_empty()
+            && self.assignments.is_empty()
+            && self.inferred.is_empty()
     }
 
     /// Make a project. `repo: Some` makes a git project, joined to every
@@ -78,14 +86,16 @@ impl Registry {
         Ok(())
     }
 
-    /// Delete a project together with its bindings and the assignments that
-    /// pointed at it; those sessions become unassigned (or are inferred again).
+    /// Delete a project together with its bindings, inferred paths, and the
+    /// assignments that pointed at it; those sessions become unassigned (or
+    /// are inferred again).
     pub fn remove_project(&mut self, id: &ProjectId) -> Result<Project, ProjectError> {
         let project = self
             .projects
             .remove(id)
             .ok_or_else(|| ProjectError::UnknownProject(id.clone()))?;
         self.bindings.retain(|_, bound| bound != id);
+        self.inferred.retain(|_, bound| bound != id);
         self.assignments.retain(|_, assigned| assigned != id);
         Ok(project)
     }
@@ -170,17 +180,21 @@ impl Registry {
         projects
     }
 
-    /// A project's bindings, ordered by device then path.
+    /// A project's manual bindings, ordered by device then path.
     pub fn bindings_of(&self, project: &ProjectId) -> Vec<Binding> {
-        self.bindings
-            .iter()
-            .filter(|(_, bound)| *bound == project)
-            .map(|((device, path), project)| Binding {
-                device: device.clone(),
-                path: path.clone(),
-                project: project.clone(),
-            })
-            .collect()
+        entries_of(&self.bindings, project)
+    }
+
+    /// A project's inferred paths (what [`Registry::discover`] added, not
+    /// what the user bound), ordered by device then path.
+    pub fn inferred_paths_of(&self, project: &ProjectId) -> Vec<Binding> {
+        entries_of(&self.inferred, project)
+    }
+
+    /// The project a folder on a device is inferred into, if any.
+    pub fn inferred_path(&self, device: &DeviceKey, path: &str) -> Option<&ProjectId> {
+        let path = normalize_path(path).ok()?;
+        self.inferred.get(&(device.clone(), path))
     }
 
     /// The project a session was explicitly assigned to.
@@ -197,7 +211,11 @@ impl Registry {
             .collect()
     }
 
-    fn check_name(&self, name: &str, except: Option<&ProjectId>) -> Result<(), ProjectError> {
+    pub(super) fn check_name(
+        &self,
+        name: &str,
+        except: Option<&ProjectId>,
+    ) -> Result<(), ProjectError> {
         if self
             .projects
             .values()
@@ -207,4 +225,17 @@ impl Registry {
         }
         Ok(())
     }
+}
+
+/// The entries of one `(device, path)` map belonging to `project`, in map
+/// order.
+fn entries_of(map: &BTreeMap<(DeviceKey, String), ProjectId>, project: &ProjectId) -> Vec<Binding> {
+    map.iter()
+        .filter(|(_, bound)| *bound == project)
+        .map(|((device, path), project)| Binding {
+            device: device.clone(),
+            path: path.clone(),
+            project: project.clone(),
+        })
+        .collect()
 }

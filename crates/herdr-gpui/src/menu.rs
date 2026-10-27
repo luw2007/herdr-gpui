@@ -14,6 +14,8 @@ mod page;
 mod pr;
 mod pr_actions;
 mod sessions;
+#[cfg(unix)]
+pub(crate) use sessions::{Facets as SessionFacets, ProjectPick as SessionProject};
 mod settings;
 mod shortcut_editor;
 #[cfg(all(feature = "integration-test", target_os = "linux"))]

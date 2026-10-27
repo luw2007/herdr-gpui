@@ -42,6 +42,59 @@ impl Filter {
     }
 }
 
+/// Which project a session must belong to. `Unassigned` is the explicit
+/// 'No project' choice: sessions the registry resolves to nothing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ProjectPick {
+    #[default]
+    Any,
+    Unassigned,
+    Is(herdr_client::ProjectId),
+}
+
+/// The explicit device and project filters. Both combine with the run-state
+/// filter and the free-text query (AND). The device is an endpoint id, which
+/// survives a catalog change where an index would not.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Facets {
+    pub(crate) device: Option<String>,
+    pub(crate) project: ProjectPick,
+}
+
+impl Facets {
+    pub(super) fn is_active(&self) -> bool {
+        self.device.is_some() || self.project != ProjectPick::Any
+    }
+
+    pub(super) fn admits_device(&self, endpoint_id: &str) -> bool {
+        self.device.as_deref().is_none_or(|id| id == endpoint_id)
+    }
+
+    /// `project` is the id the registry resolved the session to, if any.
+    pub(super) fn admits_project(&self, project: Option<&herdr_client::ProjectId>) -> bool {
+        match &self.project {
+            ProjectPick::Any => true,
+            ProjectPick::Unassigned => project.is_none(),
+            ProjectPick::Is(wanted) => project == Some(wanted),
+        }
+    }
+}
+
+/// Everything but the free text that narrows the list: run state and facets.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(in crate::menu) struct Scope {
+    pub(in crate::menu) filter: Filter,
+    pub(in crate::menu) facets: Facets,
+}
+
+impl Scope {
+    /// Whether anything, text included, hides sessions. A narrowed list drops
+    /// the Add actions and explanatory notes, which describe the whole list.
+    pub(super) fn narrows(&self, query: &Query) -> bool {
+        !query.is_empty() || self.filter != Filter::All || self.facets.is_active()
+    }
+}
+
 /// A case-insensitive query: every whitespace-separated word must appear
 /// somewhere in the session's device, name, state or saved workspaces.
 #[derive(Default)]

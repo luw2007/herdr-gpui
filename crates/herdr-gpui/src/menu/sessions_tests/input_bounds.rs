@@ -13,6 +13,7 @@ fn catalog(count: usize) -> Vec<LocalSession> {
                 branch: Some(format!("feature/s{index:03}")),
                 label: None,
                 repo: None,
+                ..Default::default()
             }],
             ..session(&format!("s{index:03}"), SessionState::Stopped)
         })

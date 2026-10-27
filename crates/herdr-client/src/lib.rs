@@ -70,9 +70,9 @@ pub use projects::{
 pub use remote_host::RemoteHost;
 pub use script::{ScriptHost, ScriptLimits, run_script, run_script_command, shell_quote};
 pub use sessions::{
-    LocalSession, RemoteSession, SessionState, SessionWorkspace, delete_local_session,
-    delete_remote_session, list_local_sessions, list_remote_sessions, stop_local_session,
-    stop_remote_session,
+    HeadState, LocalSession, RemoteSession, SessionState, SessionWorkspace, Upstream,
+    UpstreamState, delete_local_session, delete_remote_session, list_local_sessions,
+    list_remote_sessions, stop_local_session, stop_remote_session,
 };
 #[cfg(unix)]
 pub use ssh::script_command;

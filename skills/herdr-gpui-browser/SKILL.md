@@ -214,9 +214,10 @@ for what only Herdr UI shows or keeps.
 | Open a dev server in a tab, forwarded when you run on an SSH host | `herdr-gpui ports open 3000` |
 | See the processes under a pane, with CPU and memory | `herdr-gpui processes` |
 | List or focus the app's windows and its own tabs | `herdr-gpui window`, `herdr-gpui tab`, `herdr-gpui tab focus ID` |
-| List the logical Windows inside this app window, or attach a session to the active one | `herdr-gpui container`, `herdr-gpui container attach NAME` |
-| Help the user find a saved session by project, branch, or path | `herdr-gpui sessions QUERY` (opens the manager; the user chooses and confirms) |
+| List the app's Windows (global, named sets of sessions), or attach/detach a session in one | `herdr-gpui container`, `herdr-gpui container attach NAME [--in WINDOW]`, `herdr-gpui container detach NAME` |
+| Help the user find a saved session by project, branch, or path, optionally on one device or in one project (or none) | `herdr-gpui sessions QUERY [--device DEVICE] [--project PROJECT \| --no-project]` (opens the manager; the user chooses and confirms) |
 | List Herdr UI projects (logical folders across devices) or see which project this session is in and why | `herdr-gpui project`, `herdr-gpui project show` |
+| Help the user manage projects visually, including before any sessions exist | `herdr-gpui project manage` (opens Sessions → Projects; the user edits there) |
 | Group work under a project: make one, bind a non-git folder, put this session in it | `herdr-gpui project create NAME [--repo KEY]`, `herdr-gpui project bind NAME /abs/path`, `herdr-gpui project assign NAME` |
 | Delete a project (the user confirms in the app's dialog) | `herdr-gpui project delete NAME` |
 | Block until something happens in the app | `herdr-gpui wait tab-closed ID --timeout 600`, `herdr-gpui events --follow` |
@@ -229,6 +230,16 @@ device by its normalized remote, or a task codename that needs a `project
 bind` folder per device. A session is in at most one project. Name a project by
 id or exact name; `ambiguous` (exit 1) means use the id. `project delete`
 only opens the confirmation; never assume the project is gone.
+
+For interactive project setup, use `herdr-gpui project manage` or the Sessions
+manager's **Projects** entry (also **Projects** in the command palette, or
+`herdr-gpui run project_manager`), which is available even when the list is empty.
+Choose **Create project**, select a saved device (offline devices are allowed),
+and bind an absolute folder path. Existing projects can be renamed and their
+device-folder bindings added or removed. These edits only record associations:
+they never create, move, or delete server folders. The command's acknowledgement
+means the manager opened, not that the user saved an edit. `--window ID` targets
+one app window; `--json` returns a bounded acknowledgement.
 
 Sessions search combines saved workspace context from `session.json` with
 read-only Git repository and branch probes cached for 30 seconds; neither is

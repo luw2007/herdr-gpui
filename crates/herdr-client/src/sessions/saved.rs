@@ -41,7 +41,7 @@ pub(crate) const DONE: &str = "herdr-saved:done";
 const ENCODED_MAX: usize = SNAPSHOT_MAX / 3 * 4 + 4096;
 
 /// One workspace a session last saved, as context for finding the session.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionWorkspace {
     /// The repository or project the workspace belongs to: the saved worktree
     /// group's repository root, else git's common repository directory for the
@@ -61,6 +61,64 @@ pub struct SessionWorkspace {
     /// Only this key is kept: the raw URL can embed credentials and is dropped
     /// as soon as it is read.
     pub repo: Option<RepoKey>,
+    /// What the live git probe established about `branch`. `Saved` until a
+    /// probe has answered, so `branch == None` alone never means "detached".
+    pub head: HeadState,
+    /// The remote branch the checked-out branch tracks, from the same probe.
+    /// It names the PR head when the local branch name differs from the pushed
+    /// one, or the PR comes from a fork. Only [`UpstreamState::Absent`] means
+    /// the branch has no upstream configured.
+    pub upstream: UpstreamState,
+}
+
+/// Whether a workspace's branch was established by a live probe.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HeadState {
+    /// No probe has answered; `branch` is only what the saved file states.
+    #[default]
+    Saved,
+    /// A probe ran and found a checked-out branch (`branch` is `Some`).
+    Branch,
+    /// A probe ran and HEAD is detached (`branch` is `None`).
+    Detached,
+    /// The path is missing, not a repository, or could not be probed.
+    Unavailable,
+}
+
+/// The remote branch a local branch tracks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Upstream {
+    pub repo: RepoKey,
+    pub branch: String,
+}
+
+/// What the probe established about a branch's upstream. Not having one and
+/// not being able to tell are different answers: only the first may be
+/// replaced by a guess (the `origin` repository and the local branch name).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum UpstreamState {
+    /// No upstream is configured, the workspace has no branch, or no probe has
+    /// answered yet.
+    #[default]
+    Absent,
+    /// The branch tracks this remote branch.
+    Known(Upstream),
+    /// The configuration could not be read (failure or timeout).
+    Unavailable,
+    /// An upstream is configured but names nothing this version can follow: a
+    /// local `.` remote, a ref outside `refs/heads/`, or a remote whose URL is
+    /// missing or does not name a repository.
+    Unsupported,
+}
+
+impl UpstreamState {
+    /// The tracked branch, when one is known.
+    pub fn known(&self) -> Option<&Upstream> {
+        match self {
+            Self::Known(upstream) => Some(upstream),
+            _ => None,
+        }
+    }
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {
@@ -102,6 +160,8 @@ pub(crate) fn parse_snapshot(bytes: &[u8]) -> Vec<SessionWorkspace> {
             branch: text(workspace, "branch").or_else(|| text(space, "branch")),
             label: text(workspace, "custom_name").or_else(|| text(space, "label")),
             repo: None,
+            head: HeadState::Saved,
+            upstream: UpstreamState::Absent,
         });
     }
     workspaces

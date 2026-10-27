@@ -19,12 +19,12 @@ use std::{
 mod close_pane;
 mod close_sequence;
 mod dead_keys;
+mod empty_window_input;
 mod endpoint_switch;
 mod file_paste;
 mod focus_fences;
 mod focus_follows_mouse;
 mod focus_follows_mouse_render;
-mod function_keys;
 mod group_navigation_choices;
 mod group_page_move;
 mod horizontal_wheel;

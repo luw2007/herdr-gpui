@@ -16,7 +16,7 @@ use crate::{
     limits::POLL,
     ssh::{ChildGuard, script_command},
 };
-pub use saved::SessionWorkspace;
+pub use saved::{HeadState, SessionWorkspace, Upstream, UpstreamState};
 use serde::Deserialize;
 use std::{
     fs, io,

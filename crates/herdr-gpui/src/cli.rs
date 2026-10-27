@@ -165,6 +165,19 @@ impl LaunchOptions {
                 mode: LaunchMode::Control(control::parse(family, args)?),
             });
         }
+        if args
+            .peek()
+            .is_some_and(|arg| arg == "--json" || arg == "--window")
+        {
+            let mut words: Vec<_> = args.collect();
+            let index = control::family_position(&words)
+                .ok_or_else(|| CliError::UnknownOption(words[0].clone()))?;
+            let family = words.remove(index);
+            return Ok(Self {
+                target: ConnectTarget::Local,
+                mode: LaunchMode::Control(control::parse(family, words.into_iter())?),
+            });
+        }
         #[cfg(feature = "mockup")]
         if args.peek().is_some_and(|arg| arg == "--mockup") {
             args.next();

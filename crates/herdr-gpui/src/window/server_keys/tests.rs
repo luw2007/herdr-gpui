@@ -107,6 +107,32 @@ fn the_keymap_follows_the_selected_device_only_when_it_opted_in(cx: &mut TestApp
 }
 
 #[gpui::test]
+fn an_attached_session_keeps_its_devices_server_keybinding_opt_in(cx: &mut TestAppContext) {
+    let (view, cx) = window(cx);
+    view.update(cx, |view, cx| {
+        let mut slot = crate::endpoint::Endpoint::new(
+            format!("slot:{HOST}:work"),
+            "box".into(),
+            herdr_client::ConnectTarget::Ssh {
+                target: "you@box".into(),
+                session: "work".into(),
+            },
+            false,
+        );
+        slot.slot = Some(herdr_client::SessionRef::new(
+            herdr_client::DeviceKey::new(HOST).unwrap(),
+            "work",
+        ));
+        view.endpoints.push(slot);
+        opt_in(view, KeybindingSource::Server);
+        let index = view.endpoints.len() - 1;
+        select(view, index, Some(PROFILE), cx);
+        assert!(view.server_keys.is_some());
+        assert!(view.keymap().is_prefix(&key("cmd-j")));
+    });
+}
+
+#[gpui::test]
 fn an_unusable_profile_falls_back_to_local_and_says_why(cx: &mut TestAppContext) {
     let (view, cx) = window(cx);
     view.update(cx, |view, cx| {

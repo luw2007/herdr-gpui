@@ -33,6 +33,10 @@ mod device_footer_setting;
 #[cfg(test)]
 mod devices_layout;
 #[cfg(test)]
+mod grouping;
+#[cfg(test)]
+mod grouping_mr;
+#[cfg(test)]
 mod host_agents;
 #[cfg(test)]
 mod host_groups;
@@ -531,12 +535,14 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         status_bar_visible: true,
         zen: Default::default(),
         device_filter: None,
-        containers: crate::containers::ContainerSet::new(crate::containers::SessionRef::new(
+        containers: crate::containers::ContainerView::local(&crate::containers::session_ref(
             crate::endpoint::LOCAL,
             "/unused-layout-test.sock",
         )),
+        container_rewrites: Vec::new(),
         container_restore_pending: false,
         containers_dirty: false,
+        container_menu: None,
         window_id: window.window_handle().window_id(),
         endpoints: vec![crate::endpoint::Endpoint::new(
             crate::endpoint::LOCAL.into(),
@@ -624,6 +630,7 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         sidebar_revealed: Default::default(),
         sidebar_pin_reveal: Default::default(),
         sidebar_search: crate::sidebar::SidebarSearch::new(cx),
+        grouping: Default::default(),
         _poll: Task::ready(()),
         _activation: cx.observe_window_activation(window, |_, _, _| {}),
         _appearance: cx.observe_window_appearance(window, |this, _, cx| {

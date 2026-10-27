@@ -162,6 +162,20 @@ pub(super) fn run_command(name: &str, context: &Context) -> crate::Result<Output
     )
 }
 
-pub(super) fn sessions(query: String, context: &Context) -> crate::Result<Output> {
-    context.act(Request::Command, CommandOp::Sessions { query })
+pub(super) fn sessions(
+    query: String,
+    device: Option<String>,
+    project: Option<String>,
+    unassigned: bool,
+    context: &Context,
+) -> crate::Result<Output> {
+    context.act(
+        Request::Command,
+        CommandOp::Sessions {
+            query,
+            device,
+            project,
+            unassigned,
+        },
+    )
 }

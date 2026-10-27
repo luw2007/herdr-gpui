@@ -94,6 +94,13 @@ impl HerdrWindow {
                 && endpoint.connection.handle.is_none()
                 && Instant::now() >= endpoint.retry_at
             {
+                // A session stopped before the last exit stays parked, whether
+                // it is a device's own or an attached one.
+                if self.containers.set().is_paused(&endpoint.session_ref()) {
+                    endpoint.park();
+                    changed = Redraw::Window;
+                    continue;
+                }
                 endpoint.connect(self.options, index == 0 && self.selected_endpoint == 0);
                 selected_changed |= index == self.selected_endpoint;
                 changed = Redraw::Window;
@@ -108,6 +115,7 @@ impl HerdrWindow {
             changed = Redraw::Window;
         }
         self.restore_selection(cx);
+        self.sync_containers(cx);
         self.restore_container_selection(cx);
         if std::mem::take(&mut self.containers_dirty) {
             self.containers_changed(cx);
@@ -231,10 +239,10 @@ impl HerdrWindow {
         }
     }
 
-    /// Scan local sessions while the popup asks for them, and ask the saved
-    /// devices for their own sessions on their own slower interval. Probing is
-    /// I/O to the disk and to each host, so both run on workers and only this
-    /// page starts one; results are cached between opens.
+    /// Scan local sessions and the saved devices' sessions on their own
+    /// intervals. Probing is I/O to the disk and to each host, so both run on
+    /// workers and only one pass is in flight at a time; results are cached
+    /// between passes and between popup opens.
     pub(crate) fn poll_sessions(&mut self, cx: &mut Context<Self>) {
         let development = self.local_development();
         let open = self.menu.page == Some(crate::menu::Page::Sessions);
@@ -249,17 +257,77 @@ impl HerdrWindow {
             }
             return;
         }
-        let mut changed = self.sessions.poll(development, open, now);
-        if self.sessions.devices.poll(&targets, open, now) {
+        // Scans run on their own refresh cadence regardless of whether the
+        // Sessions popup is open, so project discovery keeps up with saved
+        // sessions in the background. The popup's `open` state only gates the
+        // departure animation above; starting a probe is gated by age only.
+        let mut changed = self.sessions.poll(development, now);
+        if self.sessions.devices.poll(&targets, now) {
             changed = true;
         }
         if changed {
             // Results arrive asynchronously and reorder the list: keep the
             // selection on the same (device, session), never the same ordinal.
             self.sync_session_selection();
+            // Newly saved workspaces may name projects the registry is
+            // missing. Run them through the batch discoverer: the registry is
+            // cloned once for all sessions, a failed or oversized batch changes
+            // nothing, and the global Projects observer re-syncs every window.
+            self.discover_session_projects(cx);
         }
         if changed {
             cx.notify();
+        }
+    }
+
+    /// Provision projects from the sessions the manager has just scanned.
+    /// Reads only the caches (`sessions.entries` and `sessions.devices`), so
+    /// it starts no I/O and never dials a host. A session is keyed by the
+    /// exact device endpoint id (the local one, or the device's own id) and
+    /// session name, never a slot's transport identity.
+    fn discover_session_projects(&mut self, cx: &mut Context<Self>) {
+        let local_device = self.endpoints[0].id.clone();
+        let mut pairs: Vec<(
+            herdr_client::SessionRef,
+            Vec<herdr_client::SessionWorkspace>,
+        )> = self
+            .sessions
+            .entries
+            .iter()
+            .map(|session| {
+                (
+                    crate::containers::session_ref(&local_device, session.name.clone()),
+                    session.workspaces.clone(),
+                )
+            })
+            .collect();
+        for (id, scan) in &self.sessions.devices.answers {
+            let crate::sessions::DeviceScan::Sessions(sessions) = scan else {
+                continue;
+            };
+            let Ok(device) = herdr_client::DeviceKey::new(id.clone()) else {
+                continue;
+            };
+            for session in sessions {
+                pairs.push((
+                    herdr_client::SessionRef::new(device.clone(), session.name.clone()),
+                    session.workspaces.clone(),
+                ));
+            }
+        }
+        if pairs.is_empty() {
+            return;
+        }
+        let discovered = crate::projects::Projects::update(cx, |store| {
+            store.discover(
+                pairs
+                    .iter()
+                    .map(|(session, workspaces)| (session, workspaces.as_slice())),
+            )
+        })
+        .unwrap_or(false);
+        if discovered {
+            self.sync_projects(cx);
         }
     }
 

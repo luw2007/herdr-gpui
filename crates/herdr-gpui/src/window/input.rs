@@ -242,6 +242,8 @@ impl HerdrWindow {
 
     /// Cmd-V and Edit > Paste into the focused pane or popup.
     pub(crate) fn paste(&mut self, cx: &mut Context<Self>) {
+        // Edit > Paste reaches here without passing `key_down`. An empty
+        // Window is refused by `input_ready` on every path below.
         if self.copy_mode_active() {
             return;
         }

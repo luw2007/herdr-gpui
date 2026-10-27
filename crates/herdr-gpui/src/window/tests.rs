@@ -10,6 +10,8 @@ use std::sync::Arc;
 
 mod backdrop;
 mod close_window;
+mod container_limit;
+mod container_titlebar;
 mod detach;
 mod padding;
 mod sound_volume;

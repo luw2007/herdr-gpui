@@ -2,6 +2,8 @@ use super::*;
 use crate::SessionWorkspace;
 
 mod codec;
+mod discover;
+mod merge;
 mod registry;
 mod repo_key;
 mod resolve;
@@ -25,5 +27,6 @@ fn workspace(project: &str, path: &str, repo: Option<&str>) -> SessionWorkspace 
         branch: None,
         label: None,
         repo: repo.map(key),
+        ..Default::default()
     }
 }

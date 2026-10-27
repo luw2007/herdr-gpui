@@ -112,6 +112,15 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A session header passes its slot's transport id; the menu manages
+        // the catalog device that owns the session.
+        let id = self
+            .endpoints
+            .iter()
+            .find(|endpoint| endpoint.id == id)
+            .map_or(id, |endpoint| endpoint.device_id())
+            .to_owned();
+        let id = id.as_str();
         tracing::info!(category = "device_remove", id, "Opening host menu");
         if id.starts_with(crate::endpoint::WSL_PREFIX) {
             if self.device_setup_unavailable().is_none() {

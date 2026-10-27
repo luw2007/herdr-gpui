@@ -182,7 +182,7 @@ pub(super) fn ask(
 
 /// One alias's pull request, looked up again when its branch name is
 /// crowded, which `network` (`None` while paused) must allow.
-fn answer_for(
+pub(super) fn answer_for(
     response: Value,
     target: &Target,
     token: &secrecy::SecretString,

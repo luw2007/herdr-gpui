@@ -63,6 +63,7 @@ fn workspace(path: &Path) -> SessionWorkspace {
         branch: Some("saved".into()),
         label: None,
         repo: None,
+        ..Default::default()
     }
 }
 
@@ -106,8 +107,13 @@ fn a_missing_or_non_repository_path_keeps_its_saved_values() {
     let plain = root.join("plain");
     fs::create_dir(&plain).unwrap();
     let mut list = vec![workspace(&plain), workspace(&root.join("gone"))];
-    let before = list.clone();
+    let mut before = list.clone();
     enrich("test:fallback", &mut [&mut list], probe_local);
+    // Saved values stand, but they are marked as not confirmed by git.
+    for workspace in &mut before {
+        workspace.head = HeadState::Unavailable;
+        workspace.upstream = UpstreamState::Unavailable;
+    }
     assert_eq!(list, before);
     fs::remove_dir_all(root).unwrap();
 }
@@ -120,6 +126,7 @@ fn a_saved_worktree_group_is_not_replaced_and_relative_paths_are_never_probed() 
         branch: None,
         label: None,
         repo: None,
+        ..Default::default()
     }];
     let mut relative = vec![workspace(Path::new("relative/path"))];
     let seen = std::cell::RefCell::new(Vec::new());
@@ -135,6 +142,7 @@ fn a_saved_worktree_group_is_not_replaced_and_relative_paths_are_never_probed() 
                         project: Some("/other".into()),
                         branch: Some("live".into()),
                         repo: None,
+                        ..Default::default()
                     };
                     (path.clone(), Some(info))
                 })
@@ -161,6 +169,7 @@ fn a_failed_probe_overwrites_nothing_and_a_batch_is_resumed_by_the_next_refresh(
             project: Some("/repo".into()),
             branch: Some("b".into()),
             repo: None,
+            ..Default::default()
         };
         (path.clone(), Some(info))
     };
@@ -194,6 +203,7 @@ fn the_cache_is_per_host_scope() {
                         project: Some("/a".into()),
                         branch: None,
                         repo: None,
+                        ..Default::default()
                     }),
                 )
             })
@@ -307,6 +317,7 @@ fn enrich_carries_the_probed_repo_onto_the_workspace() {
                         project: None,
                         branch: None,
                         repo: repo.clone(),
+                        ..Default::default()
                     };
                     (path.clone(), Some(info))
                 })
@@ -402,3 +413,5 @@ fn the_remote_script_reports_the_remote_without_leaking_the_raw_url() {
     assert!(!format!("{found:?}").contains("secret"));
     fs::remove_dir_all(root).unwrap();
 }
+
+mod head;

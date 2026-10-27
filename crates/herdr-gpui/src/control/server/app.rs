@@ -271,10 +271,44 @@ pub(super) fn ui(call: Call<UiOp>, cx: &mut App) -> Response {
     })
 }
 
+/// The Device and Project filters a `sessions` request names, resolved the
+/// way `project` commands resolve their references.
+fn sessions_facets(
+    view: &HerdrWindow,
+    device: Option<String>,
+    project: Option<String>,
+    unassigned: bool,
+    cx: &App,
+) -> Result<crate::menu::SessionFacets, Response> {
+    use crate::menu::{SessionFacets, SessionProject};
+    let device = device
+        .map(|name| {
+            super::projects::endpoint_named(view, &name)
+                .map(|index| view.endpoints[index].device_id().to_owned())
+        })
+        .transpose()?;
+    let project = match (project, unassigned) {
+        (Some(reference), _) => SessionProject::Is(
+            crate::projects::Projects::read(cx, |registry| {
+                super::projects::find_project(registry, &reference)
+            })?
+            .id,
+        ),
+        (None, true) => SessionProject::Unassigned,
+        (None, false) => SessionProject::Any,
+    };
+    Ok(SessionFacets { device, project })
+}
+
 pub(super) fn command(call: Call<CommandOp>, cx: &mut App) -> Response {
     let name = match call.op {
         CommandOp::Run { name } => name,
-        CommandOp::Sessions { query } => {
+        CommandOp::Sessions {
+            query,
+            device,
+            project,
+            unassigned,
+        } => {
             if !crate::control::protocol::app::valid_session_query(&query) {
                 return Response::error(
                     ErrorCode::InvalidRequest,
@@ -282,7 +316,11 @@ pub(super) fn command(call: Call<CommandOp>, cx: &mut App) -> Response {
                 );
             }
             return in_free_window(&call.caller, cx, |view, window, cx| {
-                view.open_sessions_with_query(&query, window, cx);
+                let facets = match sessions_facets(view, device, project, unassigned, cx) {
+                    Ok(facets) => facets,
+                    Err(response) => return response,
+                };
+                view.open_sessions_filtered(&query, facets, window, cx);
                 Response::done("Opened Sessions; choose a session in the manager")
             });
         }

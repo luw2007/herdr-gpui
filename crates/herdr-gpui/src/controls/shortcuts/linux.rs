@@ -50,6 +50,7 @@ pub(super) fn defaults(command: Command) -> &'static [&'static str] {
         Settings => &["ctrl-shift-,"],
         Keybinds => &["ctrl-shift-/"],
         Sessions => &["ctrl-shift-s"],
+        ProjectManager => &[],
         WorkspacePicker => &["ctrl-alt-shift-p"],
         Palette => &["ctrl-shift-p"],
         ResumePalette => &["ctrl-alt-shift-r"],

@@ -13,15 +13,15 @@ pub(crate) type Row<'a> = (usize, &'a str);
 impl HerdrWindow {
     /// Each host the sidebar lists, with the live state it draws from.
     fn listed_lives(&self) -> impl Iterator<Item = (usize, &LiveState)> {
-        self.endpoints
-            .iter()
-            .enumerate()
-            .filter(|(index, endpoint)| endpoint.enabled && self.endpoint_listed(*index))
-            .map(|(index, endpoint)| {
+        // Under a grouping the hosts step in the order they are painted.
+        self.sidebar_host_order()
+            .into_iter()
+            .filter(|index| self.endpoints[*index].enabled)
+            .map(|index| {
                 let live = if index == self.selected_endpoint {
                     &self.live
                 } else {
-                    &endpoint.live
+                    &self.endpoints[index].live
                 };
                 (index, live)
             })
@@ -37,8 +37,10 @@ impl HerdrWindow {
     /// its rows here too.
     pub(crate) fn sidebar_workspaces(&self) -> Vec<Row<'_>> {
         let multi = self.sidebar_multi();
+        let folded = self.folded_hosts();
         self.listed_hosts()
             .filter(|(index, _)| !(multi && self.endpoints[*index].collapsed))
+            .filter(|(index, _)| !folded.contains(index))
             .flat_map(|(index, snapshot)| {
                 let collapsed = if index == 0 {
                     &self.collapsed_repos

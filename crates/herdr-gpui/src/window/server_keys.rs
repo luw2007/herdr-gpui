@@ -95,8 +95,11 @@ impl HerdrWindow {
     /// or the opt-in changed. Until the first snapshot arrives there is no
     /// profile to judge, so the local keymap applies without a diagnostic.
     pub(crate) fn sync_server_keymap(&mut self, cx: &mut Context<Self>) {
-        let endpoint = &self.endpoints[self.selected_endpoint].id;
-        let wanted = self.config.keybinding_source(endpoint) == KeybindingSource::Server;
+        let selected = &self.endpoints[self.selected_endpoint];
+        let endpoint = &selected.id;
+        // The opt-in belongs to the saved device, not to the session's slot.
+        let wanted =
+            self.config.keybinding_source(selected.device_id()) == KeybindingSource::Server;
         let next =
             match (wanted, &self.live.snapshot) {
                 (true, Some(snapshot)) => {

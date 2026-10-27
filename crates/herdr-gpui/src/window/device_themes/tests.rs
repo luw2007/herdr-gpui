@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use super::*;
 use crate::{config::DeviceSettings, sidebar::layout_tests::fixture_window};
 use gpui::{Entity, TestAppContext, VisualTestContext, px, size};
@@ -82,6 +83,31 @@ fn the_selected_device_paints_its_terminal_with_its_own_theme(cx: &mut TestAppCo
     assert_eq!(terminal_theme(&view, cx), builtin("Nord"));
     settle(cx);
     assert_eq!(terminal_theme(&view, cx), builtin("Nord"));
+}
+
+#[gpui::test]
+fn an_attached_session_paints_with_its_devices_theme(cx: &mut TestAppContext) {
+    let (view, cx) = open(cx);
+    set_device_theme(&view, Some("Dracula"), cx);
+    settle(cx);
+    view.update(cx, |view, _| {
+        let mut slot = crate::endpoint::Endpoint::new(
+            format!("slot:{HOST}:work"),
+            "box".into(),
+            herdr_client::ConnectTarget::Ssh {
+                target: "penso@box".into(),
+                session: "work".into(),
+            },
+            true,
+        );
+        slot.slot = Some(herdr_client::SessionRef::new(
+            herdr_client::DeviceKey::new(HOST).unwrap(),
+            "work",
+        ));
+        view.endpoints.push(slot);
+        view.selected_endpoint = view.endpoints.len() - 1;
+    });
+    assert_eq!(terminal_theme(&view, cx), builtin("Dracula"));
 }
 
 #[gpui::test]

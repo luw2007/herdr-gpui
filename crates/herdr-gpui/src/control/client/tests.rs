@@ -30,6 +30,7 @@ fn every_error_code_has_one_exit_status() {
         (ErrorCode::Unsupported, exit::UNSUPPORTED),
         (ErrorCode::InvalidRequest, exit::REFUSED),
         (ErrorCode::Failed, exit::REFUSED),
+        (ErrorCode::Ambiguous, exit::REFUSED),
     ] {
         assert_eq!(status(&rejected(code)), expected, "{code:?}");
     }

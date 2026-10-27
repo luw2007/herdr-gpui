@@ -25,6 +25,8 @@ use herdr_client::{
     SessionWorkspace, Source,
 };
 
+mod manage;
+
 #[cfg(test)]
 mod tests;
 
@@ -37,6 +39,7 @@ pub(super) fn project(call: Call<ProjectOp>, cx: &mut App) -> Response {
         return Response::error(ErrorCode::InvalidRequest, message);
     }
     match op {
+        ProjectOp::Manage {} => manage::open(&caller, cx),
         ProjectOp::Delete { project } => in_free_window(&caller, cx, |view, window, cx| {
             let found = match Projects::read(cx, |registry| find_project(registry, &project)) {
                 Ok(found) => found,
@@ -174,7 +177,9 @@ fn run(op: ProjectOp, view: &HerdrWindow, caller: &Caller, cx: &mut App) -> Resp
             }
         }
         // Handled before a window is chosen.
-        ProjectOp::Delete { .. } => Response::error(ErrorCode::Failed, "Unexpected request"),
+        ProjectOp::Delete { .. } | ProjectOp::Manage {} => {
+            Response::error(ErrorCode::Failed, "Unexpected request")
+        }
     }
 }
 
@@ -254,7 +259,7 @@ fn list(cx: &App) -> Response {
 
 /// The project a reference names: an id, else one exact name compared
 /// without regard to case. A name two projects share is never guessed.
-fn find_project(registry: &Registry, reference: &str) -> Result<Project, Response> {
+pub(super) fn find_project(registry: &Registry, reference: &str) -> Result<Project, Response> {
     if let Ok(id) = ProjectId::parse(reference)
         && let Some(project) = registry.project(&id)
     {
@@ -299,8 +304,7 @@ fn ambiguous(
     )
 }
 
-/// The session a request is about: a device by its endpoint id, and a
-/// session by its name on that device.
+/// The session a request is about: a real device key and a session name.
 struct Subject {
     device: String,
     session: String,
@@ -308,15 +312,21 @@ struct Subject {
 
 /// Matches `name` against the window's devices by endpoint id, else by one
 /// label compared without regard to case.
-fn endpoint_named(view: &HerdrWindow, name: &str) -> Result<usize, Response> {
-    if let Some(index) = view.endpoints.iter().position(|e| e.id == name) {
+pub(super) fn endpoint_named(view: &HerdrWindow, name: &str) -> Result<usize, Response> {
+    if let Some(index) = view
+        .endpoints
+        .iter()
+        .position(|e| e.slot.is_none() && e.device_id() == name)
+    {
         return Ok(index);
     }
     let labelled: Vec<usize> = view
         .endpoints
         .iter()
         .enumerate()
-        .filter(|(_, endpoint)| endpoint.label.eq_ignore_ascii_case(name))
+        .filter(|(_, endpoint)| {
+            endpoint.slot.is_none() && endpoint.label.eq_ignore_ascii_case(name)
+        })
         .map(|(index, _)| index)
         .collect();
     match labelled.as_slice() {
@@ -349,7 +359,7 @@ fn device_of(
 ) -> Result<String, Response> {
     match named {
         Some(name) => match endpoint_named(view, name) {
-            Ok(index) => Ok(view.endpoints[index].id.clone()),
+            Ok(index) => Ok(view.endpoints[index].device_id().to_owned()),
             Err(response) if allow_unknown && DeviceKey::new(name).is_ok() => match response {
                 Response::Error {
                     code: ErrorCode::NotFound,
@@ -359,7 +369,9 @@ fn device_of(
             },
             Err(response) => Err(response),
         },
-        None => current_index(view, caller).map(|index| view.endpoints[index].id.clone()),
+        None => {
+            current_index(view, caller).map(|index| view.endpoints[index].device_id().to_owned())
+        }
     }
 }
 
@@ -413,18 +425,23 @@ fn subject(
     let endpoint = &view.endpoints[index];
     let session = match session {
         Some(name) => name.to_owned(),
-        None => attached_session(&endpoint.connection.target).ok_or_else(|| {
-            Response::error(
-                ErrorCode::InvalidRequest,
-                format!(
-                    "Cannot tell which session {} is attached to; name it with --session",
-                    endpoint.label
-                ),
-            )
-        })?,
+        None => endpoint
+            .slot
+            .as_ref()
+            .map(|slot| slot.session.clone())
+            .or_else(|| attached_session(&endpoint.connection.target))
+            .ok_or_else(|| {
+                Response::error(
+                    ErrorCode::InvalidRequest,
+                    format!(
+                        "Cannot tell which session {} is attached to; name it with --session",
+                        endpoint.label
+                    ),
+                )
+            })?,
     };
     Ok(Subject {
-        device: endpoint.id.clone(),
+        device: endpoint.device_id().to_owned(),
         session,
     })
 }

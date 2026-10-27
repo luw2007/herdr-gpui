@@ -99,11 +99,15 @@ fn unknown_fields_versions_and_malformed_input_are_rejected() {
         );
     }
     let mut doc = valid();
-    doc["version"] = json!(2);
+    doc["version"] = json!(3);
     assert!(matches!(
         decode(&doc),
-        Err(ProjectError::UnsupportedVersion(2))
+        Err(ProjectError::UnsupportedVersion(3))
     ));
+    // Version 2 without inferred paths is accepted and equals version 1.
+    let mut doc = valid();
+    doc["version"] = json!(2);
+    assert_eq!(decode(&doc).unwrap(), decode(&valid()).unwrap());
     assert!(matches!(
         Registry::from_json(b"not json"),
         Err(ProjectError::Schema(_))
@@ -290,4 +294,149 @@ fn writing_refuses_what_reading_would_refuse() {
     let bytes = registry.to_json().unwrap();
     assert!(bytes.len() <= Registry::MAX_JSON_BYTES);
     assert_eq!(Registry::from_json(&bytes).unwrap(), registry);
+}
+
+#[test]
+fn check_saveable_agrees_with_to_json_at_the_size_cap() {
+    let mut registry = Registry::new();
+    let project = registry.create_project("p", None).unwrap();
+    let dev = device(&format!("ssh:{}", "d".repeat(100)));
+    let mut index = 0;
+    while registry.check_saveable().is_ok() {
+        // Both sides agree before the cap...
+        assert!(registry.to_json().is_ok());
+        for _ in 0..200 {
+            let path = format!("/{}/{index}", "x".repeat(900));
+            index += 1;
+            registry.bind(dev.clone(), &path, &project.id).unwrap();
+        }
+        assert!(
+            index < MAX_BINDINGS,
+            "the cap must be hit before the count limit"
+        );
+    }
+    // ...and after it.
+    assert!(matches!(
+        registry.check_saveable(),
+        Err(ProjectError::TooLarge)
+    ));
+    assert!(matches!(registry.to_json(), Err(ProjectError::TooLarge)));
+}
+
+#[test]
+fn the_borrowing_encoder_writes_the_documented_schema() {
+    let mut registry = Registry::new();
+    let project = registry
+        .create_project("p", Some(key("git@github.com:a/b.git")))
+        .unwrap();
+    registry
+        .bind(device("local"), "/work", &project.id)
+        .unwrap();
+    registry
+        .assign(session("local", "s1"), &project.id)
+        .unwrap();
+    let value: Value = serde_json::from_slice(&registry.to_json().unwrap()).unwrap();
+    assert_eq!(value["version"], 1);
+    assert_eq!(value["projects"][0]["repo"], "github.com/a/b");
+    assert_eq!(value["bindings"][0]["path"], "/work");
+    assert_eq!(value["assignments"][0]["session"], "s1");
+    assert_eq!(
+        Registry::from_json(&registry.to_json().unwrap()).unwrap(),
+        registry
+    );
+}
+
+fn valid_with_inferred() -> Value {
+    json!({
+        "version": 2,
+        "projects": [
+            {"id": ID_A, "name": "app", "repo": "github.com/o/app"},
+            {"id": ID_B, "name": "task"},
+        ],
+        "bindings": [{"device": "local", "path": "/t", "project": ID_B}],
+        "inferred_paths": [
+            {"device": "ssh:box", "path": "/srv/abc", "project": ID_B},
+        ],
+        "assignments": [{"device": "local", "session": "main", "project": ID_A}],
+    })
+}
+
+#[test]
+fn version_two_inferred_paths_round_trip_as_v2_only_when_present() {
+    let registry = decode(&valid_with_inferred()).unwrap();
+    let bytes = registry.to_json().unwrap();
+    assert_eq!(Registry::from_json(&bytes).unwrap(), registry);
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["version"], 2);
+    assert_eq!(value["inferred_paths"][0]["path"], "/srv/abc");
+    // The same registry without its inference writes version 1 with no field.
+    let mut without = registry.clone();
+    without.inferred.clear();
+    let v1: Value = serde_json::from_slice(&without.to_json().unwrap()).unwrap();
+    assert_eq!(v1["version"], 1);
+    assert!(v1["inferred_paths"].is_null());
+}
+
+#[test]
+fn unknown_inferred_fields_are_rejected() {
+    let mut doc = valid_with_inferred();
+    doc["inferred_paths"][0]["note"] = json!("extra");
+    assert!(matches!(decode(&doc), Err(ProjectError::Schema(_))));
+    let mut doc = valid_with_inferred();
+    doc["inferred_paths_extra"] = json!(1);
+    assert!(matches!(decode(&doc), Err(ProjectError::Schema(_))));
+}
+
+#[test]
+fn dangling_duplicate_and_invalid_inferred_paths_are_rejected() {
+    let cases: Vec<(&str, Edit, Check)> = vec![
+        (
+            "dangling inferred",
+            |v| v["inferred_paths"][0]["project"] = json!(ID_A.replace('1', "3")),
+            |e| matches!(e, ProjectError::UnknownProject(_)),
+        ),
+        (
+            "duplicate inferred",
+            |v| {
+                let i = v["inferred_paths"][0].clone();
+                v["inferred_paths"].as_array_mut().unwrap().push(i)
+            },
+            |e| matches!(e, ProjectError::DuplicateEntry),
+        ),
+        (
+            "relative inferred path",
+            |v| v["inferred_paths"][0]["path"] = json!("abc"),
+            |e| matches!(e, ProjectError::InvalidPath),
+        ),
+        (
+            "trailing-slash inferred path",
+            |v| v["inferred_paths"][0]["path"] = json!("/srv/abc/"),
+            |e| matches!(e, ProjectError::InvalidPath),
+        ),
+    ];
+    for (label, mutate, expected) in cases {
+        let mut doc = valid_with_inferred();
+        mutate(&mut doc);
+        let error = decode(&doc).unwrap_err();
+        assert!(expected(&error), "{label}: {error:?}");
+    }
+}
+
+#[test]
+fn manual_plus_inferred_paths_share_the_binding_budget() {
+    let mut doc = valid_with_inferred();
+    doc["bindings"] = json!(
+        (0..MAX_BINDINGS)
+            .map(|i| json!({"device": "local", "path": format!("/p{i}"), "project": ID_B}))
+            .collect::<Vec<_>>()
+    );
+    doc["inferred_paths"] = json!(
+        (0..MAX_BINDINGS)
+            .map(|i| json!({"device": "local", "path": format!("/q{i}"), "project": ID_B}))
+            .collect::<Vec<_>>()
+    );
+    assert!(matches!(
+        decode(&doc),
+        Err(ProjectError::LimitReached(Limit::Bindings))
+    ));
 }

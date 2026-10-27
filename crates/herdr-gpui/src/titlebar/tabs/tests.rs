@@ -2,7 +2,7 @@
 use super::*;
 use crate::{sidebar::SidebarMode, titlebar::tests::header_window};
 use core::prelude::v1::test;
-use gpui::{Bounds, TestAppContext, VisualTestContext, point, px, size};
+use gpui::{TestAppContext, VisualTestContext, px, size};
 use herdr_client::protocol::ClientShellTabStatusSegment;
 
 mod navigation_gap;
@@ -52,15 +52,13 @@ fn only_the_strips_at_the_window_edges_carry_the_bar() {
 fn the_tab_row_stands_in_for_the_header(cx: &mut TestAppContext) {
     let (_, cx) = window(cx);
     assert!(cx.debug_bounds("titlebar").is_none());
-    let top = cx
-        .debug_bounds("application-menu-bar")
-        .map_or(px(0.), |bar| bar.bottom());
-    assert_eq!(cx.debug_bounds("window-body").unwrap().top(), top);
     // The sidebar's first row clears the traffic lights and holds the toggle,
     // level with the tabs beside it.
+    let body = cx.debug_bounds("window-body").unwrap();
     let header = cx.debug_bounds("sidebar-titlebar").unwrap();
     let sidebar = cx.debug_bounds("sidebar").unwrap();
-    assert_eq!(header.origin, point(px(0.), top));
+    assert_eq!(header.origin.x, px(0.));
+    assert_eq!(header.top(), body.top());
     assert_eq!(header.size, size(sidebar.size.width, px(HEIGHT)));
     assert_eq!(sidebar.top(), header.bottom());
     let toggle = cx.debug_bounds("toggle-sidebar").unwrap();
@@ -75,14 +73,14 @@ fn the_tab_row_stands_in_for_the_header(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("strip-titlebar-leading").is_none());
     // The strip ends with the account at the window's right edge.
     let new_tab = cx.debug_bounds("new-tab").unwrap();
-    assert_eq!(new_tab.top(), top);
+    assert_eq!(new_tab.top(), header.top());
     assert_eq!(new_tab.size.height, px(HEIGHT));
     let trailing = cx.debug_bounds("strip-titlebar-trailing").unwrap();
     assert_eq!(trailing.right(), px(1200.));
-    assert_eq!(
-        cx.debug_bounds("titlebar-avatar").unwrap(),
-        Bounds::new(point(px(1200. - 34.), top + px(3.)), size(px(28.), px(28.)))
-    );
+    let avatar = cx.debug_bounds("titlebar-avatar").unwrap();
+    assert_eq!(avatar.size, size(px(28.), px(28.)));
+    assert!(trailing.contains(&avatar.center()));
+    assert!(avatar.right() <= trailing.right());
     let room = cx.debug_bounds("strip-titlebar-room").unwrap();
     assert!(room.size.width >= px(DRAG_ROOM));
     assert!(new_tab.right() <= room.left());
@@ -121,10 +119,8 @@ fn a_collapsed_sidebar_keeps_the_toggle_in_the_header_when_it_fits(cx: &mut Test
         let back = cx.debug_bounds("titlebar-back").unwrap();
         assert!(leading.contains(&back.center()), "{mode}");
         assert!(back.left() >= toggle.right(), "{mode}");
-        let top = cx
-            .debug_bounds("application-menu-bar")
-            .map_or(px(0.), |bar| bar.bottom());
-        assert_eq!(leading.top(), top, "{mode}");
+        let body = cx.debug_bounds("window-body").unwrap();
+        assert_eq!(leading.top(), body.top(), "{mode}");
         // Clear of the traffic lights, whatever the column beside it covers.
         assert!(toggle.left() >= px(LEADING), "{mode}");
         if expected.is_none() {

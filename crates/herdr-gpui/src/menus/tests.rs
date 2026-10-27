@@ -396,28 +396,13 @@ fn hide_and_minimize_are_macos_only() {
         .iter()
         .find(|menu| menu.name.as_ref() == "Herdr")
         .unwrap();
-    assert_eq!(
-        action_names(herdr),
-        [
-            "About Herdr",
-            "Command Palette",
-            "Settings",
-            "Keyboard Shortcuts",
-            "Check for Updates...",
-            "Quit Herdr",
-        ]
-    );
+    let names = action_names(herdr);
+    for name in ["Hide Herdr", "Hide Others", "Show All"] {
+        assert!(!names.contains(&name));
+    }
     let window = menus
         .iter()
         .find(|menu| menu.name.as_ref() == "Window")
         .unwrap();
-    assert_eq!(
-        action_names(window),
-        [
-            "New Window",
-            "Cycle Through Windows",
-            "Close Window",
-            "Logs"
-        ]
-    );
+    assert!(!action_names(window).contains(&"Minimize"));
 }

@@ -357,6 +357,12 @@ pub(crate) fn menus(layout: Layout) -> Vec<Menu> {
                     },
                 ),
                 MenuItem::action(
+                    "Sessions",
+                    RunCommand {
+                        command: Command::Sessions,
+                    },
+                ),
+                MenuItem::action(
                     "Cycle Through Windows",
                     RunCommand {
                         command: Command::CycleWindows,

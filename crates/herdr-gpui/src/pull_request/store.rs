@@ -63,6 +63,25 @@ pub(crate) struct Shared(pub(crate) Rc<RefCell<Store>>);
 
 impl gpui::Global for Shared {}
 
+impl Shared {
+    /// The accounts GitHub has refused, and until when, for other readers of
+    /// the same accounts (the sidebar's MR grouping) to leave alone. Empty
+    /// while the store is borrowed: the next poll asks again.
+    pub(crate) fn pauses(&self, now: Instant) -> Vec<(String, Instant)> {
+        self.0.try_borrow().map_or_else(
+            |_| Vec::new(),
+            |store| {
+                store
+                    .pauses
+                    .iter()
+                    .filter(|pause| now < pause.until)
+                    .map(|pause| (pause.login.clone(), pause.until))
+                    .collect()
+            },
+        )
+    }
+}
+
 impl Store {
     pub(super) fn changed(&mut self) {
         self.revision = self.revision.wrapping_add(1);

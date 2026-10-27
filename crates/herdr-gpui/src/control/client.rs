@@ -367,7 +367,12 @@ pub(crate) fn run(invocation: Invocation) -> ExitCode {
         ControlCommand::Container(command) => container::container(command, &context),
         ControlCommand::Ui(command) => app::ui(command, &context),
         ControlCommand::Run { name } => app::run_command(&name, &context),
-        ControlCommand::Sessions { query } => app::sessions(query, &context),
+        ControlCommand::Sessions {
+            query,
+            device,
+            project,
+            unassigned,
+        } => app::sessions(query, device, project, unassigned, &context),
         ControlCommand::Project(command) => projects::run(command, &context),
         ControlCommand::Commands => local::commands(),
         ControlCommand::Tab(command) => tabs::tab(command, &context),

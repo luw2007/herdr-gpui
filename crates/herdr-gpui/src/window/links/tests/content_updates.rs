@@ -351,7 +351,7 @@ fn endpoint_retargeting_drops_a_pending_press(cx: &mut gpui::TestAppContext) {
         (view.live.surface.clone(), view.live.snapshot.clone())
     });
     view.update(cx, |view, cx| {
-        view.attach_session(crate::containers::SessionRef::new("ssh:box", "other"), cx);
+        view.attach_session(crate::containers::session_ref("ssh:box", "other"), cx);
         assert!(view.pressed_terminal_link.is_none());
         view.live.surface = surface;
         view.live.snapshot = snapshot;

@@ -236,7 +236,7 @@ impl HerdrWindow {
                 return;
             }
             Command::NewContainer => {
-                let _ = self.new_container(None, cx);
+                self.new_container_reporting(cx);
                 return;
             }
             Command::NextContainer | Command::PreviousContainer => {
@@ -347,6 +347,10 @@ impl HerdrWindow {
                 // The button's own position, so the shortcut opens the list where
                 // clicking the button does.
                 self.open_sessions(self.sessions_anchor.get(), window, cx);
+                return;
+            }
+            Command::ProjectManager => {
+                self.open_project_manager(window, cx);
                 return;
             }
             Command::Themes => {

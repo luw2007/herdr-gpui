@@ -11,14 +11,19 @@
 //! Saving hands a snapshot to a [`state_file::Writer`] worker: the UI thread
 //! never waits on the disk. Every mutation bumps [`Projects::revision`] and
 //! notifies the global's observers, which is how every window repaints.
-use crate::state_file;
+use crate::{
+    shared_state::{self, Shared},
+    state_file,
+};
 use gpui::{App, BorrowAppContext, Global};
 use herdr_client::{
     Binding, DeviceKey, Project, ProjectError, ProjectId, Registry, RepoKey, Resolution,
     SessionRef, SessionWorkspace,
 };
-use serde::{Serialize, Serializer};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 #[cfg(test)]
 mod tests;
@@ -26,17 +31,19 @@ mod tests;
 const FILE: &str = "projects.json";
 const BACKUP: &str = "projects.json.bad";
 
-/// What the writer saves: a copy of the registry, encoded on the worker.
-pub(crate) struct Snapshot(Registry);
-
-impl Serialize for Snapshot {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let bytes = self.0.to_json().map_err(serde::ser::Error::custom)?;
-        let value: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(serde::ser::Error::custom)?;
-        value.serialize(serializer)
+impl Shared for Registry {
+    const LIMIT: u64 = Registry::MAX_JSON_BYTES as u64;
+    fn decode(bytes: &[u8]) -> crate::Result<Self> {
+        Ok(Registry::from_json(bytes)?)
+    }
+    fn encode(&self) -> crate::Result<Vec<u8>> {
+        Ok(self.to_json()?)
+    }
+    fn merge(base: &Self, mine: &Self, theirs: &Self) -> crate::Result<Self> {
+        Ok(Registry::merge(base, mine, theirs)?)
     }
 }
+type Snapshot = shared_state::Snapshot<Registry>;
 
 #[derive(Default)]
 pub(crate) struct Projects {
@@ -44,6 +51,8 @@ pub(crate) struct Projects {
     revision: u64,
     writer: Option<state_file::Writer<Snapshot>>,
     quitting: bool,
+    /// Saves that picked up another process's edits, waiting to be adopted.
+    inbox: Arc<shared_state::Inbox<Registry>>,
 }
 
 impl Global for Projects {}
@@ -63,15 +72,17 @@ impl Projects {
         let Some(path) = path else {
             return Self::default();
         };
-        let (registry, damaged) = match read_registry(&path) {
-            Ok(registry) => (registry, false),
+        let registry = match read_registry(&path) {
+            Ok(registry) => registry,
             Err(error) => {
                 tracing::warn!(%error, "Cannot restore projects; starting empty and keeping the file");
-                (Registry::new(), true)
+                Registry::new()
             }
         };
-        let backup = damaged.then(|| backup_path(&path));
-        let writer = match state_file::Writer::start_preserving("projects", path, backup) {
+        let backup = Some(backup_path(&path));
+        let inbox = Arc::new(shared_state::Inbox::default());
+        let save = shared_state::saver(registry.clone(), backup.clone(), inbox.clone());
+        let writer = match state_file::Writer::start_with("projects", path, None, save) {
             Ok(writer) => Some(writer),
             Err(error) => {
                 tracing::warn!(%error, "Cannot start the projects worker");
@@ -83,6 +94,7 @@ impl Projects {
             revision: 0,
             writer,
             quitting: false,
+            inbox,
         }
     }
 
@@ -132,7 +144,8 @@ impl Projects {
     }
 
     /// Applies `change`; on success counts the revision and queues a save.
-    /// A failed change leaves the registry as it was.
+    /// A failed change, including one that would make the registry too large
+    /// to save, leaves the registry as it was.
     fn mutate<R>(
         &mut self,
         change: impl FnOnce(&mut Registry) -> Result<R, ProjectError>,
@@ -140,6 +153,11 @@ impl Projects {
         let mut next = self.registry.clone();
         let result = change(&mut next)?;
         if next != self.registry {
+            // Refuse a state the writer could not persist, so a success here
+            // always means the change survives a restart. The check counts the
+            // encoding up to the 4 MiB cap without allocating it, the same
+            // order of work as the clone above.
+            next.check_saveable()?;
             self.registry = next;
             self.revision += 1;
             self.save();
@@ -147,12 +165,30 @@ impl Projects {
         Ok(result)
     }
 
+    /// Whether a save merged in another process's edits not adopted yet.
+    pub(crate) fn has_external_edits(&self) -> bool {
+        self.inbox.has_news()
+    }
+    /// Adopts what another process saved, keeping any edit made since.
+    pub(crate) fn adopt_external(&mut self) {
+        match shared_state::adopt(&self.inbox, &self.registry) {
+            Ok(Some((next, dirty))) => {
+                self.registry = next;
+                self.revision += 1;
+                if dirty {
+                    self.save();
+                }
+            }
+            Ok(None) => {}
+            Err(error) => tracing::warn!(%error, "Cannot merge another process's projects"),
+        }
+    }
     fn save(&self) {
         if self.quitting {
             return;
         }
         if let Some(writer) = &self.writer {
-            writer.save(Snapshot(self.registry.clone()));
+            writer.save(shared_state::Snapshot(self.registry.clone()));
         }
     }
 
@@ -172,6 +208,7 @@ impl Projects {
         self.mutate(|registry| registry.remove_project(id))
     }
 
+    #[cfg(any(unix, test))]
     pub(crate) fn bind(
         &mut self,
         device: &str,
@@ -190,6 +227,40 @@ impl Projects {
         self.mutate(|registry| registry.unbind(&device, path))
     }
 
+    /// Replace an edited association atomically: validation failure preserves
+    /// the old binding, and no filesystem or network operation is performed.
+    pub(crate) fn replace_binding(
+        &mut self,
+        previous: Option<&Binding>,
+        device: &str,
+        path: &str,
+        project: &ProjectId,
+    ) -> crate::Result<()> {
+        let device = DeviceKey::new(device)?;
+        self.mutate(|registry| {
+            if let Some(previous) = previous {
+                // A concurrent edit must not silently remove another project's
+                // association. The registry enforces new-path conflicts below.
+                if registry.bindings_of(project).contains(previous) {
+                    registry.unbind(&previous.device, &previous.path)?;
+                }
+            }
+            registry.bind(device, path, project)?;
+            Ok(())
+        })
+    }
+
+    /// Remove only the association displayed by this window, not a binding
+    /// another window has since reassigned to another project.
+    pub(crate) fn remove_binding(&mut self, binding: &Binding) -> crate::Result<()> {
+        self.mutate(|registry| {
+            if registry.bindings_of(&binding.project).contains(binding) {
+                registry.unbind(&binding.device, &binding.path)?;
+            }
+            Ok(())
+        })
+    }
+
     pub(crate) fn assign(
         &mut self,
         device: &str,
@@ -204,6 +275,31 @@ impl Projects {
     pub(crate) fn unassign(&mut self, device: &str, session: &str) -> crate::Result<bool> {
         let session = SessionRef::new(DeviceKey::new(device)?, session);
         self.mutate(|registry| Ok(registry.unassign(&session)))
+    }
+
+    /// Drops the folder bindings and session assignments of the device with
+    /// endpoint id `device`. Call it only when the device was removed for good;
+    /// disabling it or failing to reach it keeps them. Whether anything went.
+    pub(crate) fn forget_device(&mut self, device: &str) -> crate::Result<bool> {
+        let device = DeviceKey::new(device)?;
+        let mut removed = false;
+        self.mutate(|registry| {
+            removed = registry.forget_device(&device);
+            Ok(())
+        })?;
+        Ok(removed)
+    }
+
+    /// Provision projects for sessions that saved workspaces can identify.
+    /// Runs the batch through [`Self::mutate`], so the registry is cloned once
+    /// for all sessions, the three-way save picks up other processes' edits,
+    /// and a failure or a save that would exceed the limit leaves it as it was.
+    /// Returns whether anything was added.
+    pub(crate) fn discover<'a, I>(&mut self, sessions: I) -> crate::Result<bool>
+    where
+        I: IntoIterator<Item = (&'a SessionRef, &'a [SessionWorkspace])>,
+    {
+        self.mutate(|registry| registry.discover_sessions(sessions))
     }
 
     /// The project of a session on the device with endpoint id `device`.

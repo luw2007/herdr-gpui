@@ -1,9 +1,14 @@
 //! `project`: the app's logical folders across devices.
 use super::{Args, CliError, unknown};
 
+#[cfg(test)]
+mod manage;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectCommand {
     List,
+    /// Open the Projects manager, without changing any records.
+    Manage,
     /// A task project, or a git project when `repo` names its repository.
     Create {
         name: String,
@@ -47,6 +52,7 @@ pub(super) fn project(args: &mut Args) -> Result<ProjectCommand, CliError> {
     };
     let command = match verb.to_str() {
         Some("list") => ProjectCommand::List,
+        Some("manage") => ProjectCommand::Manage,
         Some("create") => {
             let repo = args.text_option("--repo")?;
             let task = args.flag("--task");

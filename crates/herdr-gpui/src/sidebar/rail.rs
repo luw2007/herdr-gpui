@@ -133,10 +133,14 @@ impl HerdrWindow {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll();
-        for (endpoint_index, endpoint) in self.endpoints.iter().enumerate() {
-            if !self.endpoint_listed(endpoint_index) {
+        // The rail has no room for group headings, but it keeps the grouped
+        // order and leaves out the hosts of a folded group.
+        let folded = self.folded_hosts();
+        for endpoint_index in self.sidebar_host_order() {
+            if folded.contains(&endpoint_index) {
                 continue;
             }
+            let endpoint = &self.endpoints[endpoint_index];
             let selected = endpoint_index == self.selected_endpoint;
             let endpoint_id = endpoint.id.clone();
             let initial = host_initial(&endpoint.label);

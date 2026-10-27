@@ -239,6 +239,50 @@ impl HerdrWindow {
         }
     }
 
+    /// Devices that were listed and a successful catalog read no longer lists:
+    /// removed for good, not disabled (a disabled device stays listed) and not
+    /// unreachable (that never reaches the catalog). Cloud devices count only
+    /// when their list was read and this system can have one; an unreadable
+    /// list keeps the current endpoints in `devices` already.
+    fn removed_device_ids(&self, devices: &[Device]) -> Vec<String> {
+        self.endpoints
+            .iter()
+            .skip(1)
+            .filter(|endpoint| endpoint.slot.is_none())
+            .filter(|endpoint| {
+                #[cfg(feature = "cloud")]
+                if matches!(endpoint.connection.target, ConnectTarget::Cloud { .. }) {
+                    return crate::cloud::unavailable().is_none();
+                }
+                #[cfg(not(feature = "cloud"))]
+                let _ = endpoint;
+                true
+            })
+            .filter(|endpoint| !devices.iter().any(|device| device.id == endpoint.id))
+            .map(|endpoint| endpoint.id.clone())
+            .collect()
+    }
+
+    /// Drops the project bindings and assignments of devices removed for good.
+    fn forget_removed_devices(&mut self, removed: &[String], cx: &mut Context<Self>) {
+        if removed.is_empty() {
+            return;
+        }
+        let changed = crate::projects::Projects::update(cx, |store| {
+            let mut changed = false;
+            for id in removed {
+                match store.forget_device(id) {
+                    Ok(forgot) => changed |= forgot,
+                    Err(error) => tracing::warn!(%error, id, "Cannot forget a removed device"),
+                }
+            }
+            changed
+        });
+        if changed {
+            self.sync_projects(cx);
+        }
+    }
+
     /// SSH hosts and WSL distributions only, keeping the current cloud
     /// endpoints; for fixtures.
     #[cfg(test)]
@@ -292,6 +336,7 @@ impl HerdrWindow {
                     }),
             ),
         }
+        let removed = self.removed_device_ids(&devices);
         let selected = &self.endpoints[self.selected_endpoint];
         let selected_id = selected.id.clone();
         let selected_retired = self.selected_endpoint != 0
@@ -366,9 +411,10 @@ impl HerdrWindow {
         // device's entry is unchanged; an edited or removed entry retires it,
         // and the logical Window's slot dials again from the new entry.
         for mut slot in slots {
-            let device = next
-                .iter()
-                .find(|e| e.slot.is_none() && Some(&e.id) == slot.slot.as_ref().map(|s| &s.device));
+            let device = next.iter().find(|e| {
+                e.slot.is_none()
+                    && Some(e.id.as_str()) == slot.slot.as_ref().map(|s| s.device.as_str())
+            });
             let Some(device) = device else {
                 continue;
             };
@@ -380,13 +426,17 @@ impl HerdrWindow {
             }
         }
         self.endpoints = next;
-        self.selected_endpoint = self
-            .endpoints
-            .iter()
-            .position(|e| e.id == selected_id)
-            .unwrap_or(0);
-        self.prune_slots();
+        let kept = self.endpoints.iter().position(|e| e.id == selected_id);
+        self.selected_endpoint = kept.unwrap_or(0);
+        self.prune_slots(cx);
+        self.forget_removed_devices(&removed, cx);
         self.materialize_slots();
+        // The shown connection was retired (its device was edited or
+        // disabled): the Window's selected member is chosen again, so the
+        // screen, the model and the pending restore keep agreeing.
+        if selected_retired || kept.is_none() {
+            self.reselect_active_member(cx);
+        }
         // A tab torn off another window may belong to a host just listed.
         self.land_arrival(true, cx);
         cx.notify();

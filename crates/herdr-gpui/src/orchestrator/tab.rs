@@ -185,7 +185,7 @@ impl HerdrWindow {
             .iter()
             .filter(|endpoint| matches!(endpoint.connection.target, ConnectTarget::Ssh { .. }))
             .find(|endpoint| &endpoint.connection.target == target)
-            .and_then(|endpoint| self.menu.github_hosts.get(&endpoint.id));
+            .and_then(|endpoint| self.menu.github_hosts.get(endpoint.device_id()));
         let profile =
             host.and_then(|auth| auth.profile.as_ref())
                 .or(self.menu.github.profile.as_ref());

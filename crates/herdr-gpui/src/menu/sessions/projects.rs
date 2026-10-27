@@ -1,13 +1,23 @@
-//! Projects in the sessions manager: which project a row resolves to, and the
-//! small modal that moves a session between projects, makes, renames, binds
-//! and removes them. A session is always named by (device endpoint id, session
-//! name); a project change never touches the session itself.
+//! Project resolution and editing in the Sessions manager. The standalone
+//! catalog and saved-server folder forms live in `manager`; session moves
+//! retain (canonical device endpoint id, session name) identity and never
+//! change the session itself.
 use super::*;
 use crate::{projects::Projects, search_input::SearchInput};
 use herdr_client::{ProjectId, RepoKey, Source};
 
+mod manager;
+
 /// The modal's state. Forms capture identities, never row ordinals.
 pub(in crate::menu) enum ProjectEdit {
+    Manager,
+    Detail {
+        id: ProjectId,
+    },
+    ChooseDevice {
+        id: ProjectId,
+        previous: Option<herdr_client::Binding>,
+    },
     /// Pick the project of `row`.
     Move {
         row: Row,
@@ -29,6 +39,7 @@ pub(in crate::menu) enum ProjectEdit {
         id: ProjectId,
         device: String,
         input: Entity<SearchInput>,
+        previous: Option<herdr_client::Binding>,
     },
     Remove {
         id: ProjectId,
@@ -41,7 +52,11 @@ impl ProjectEdit {
             Self::Create { input, .. } | Self::Rename { input, .. } | Self::Bind { input, .. } => {
                 Some(input)
             }
-            Self::Move { .. } | Self::Remove { .. } => None,
+            Self::Move { .. }
+            | Self::Remove { .. }
+            | Self::Manager
+            | Self::Detail { .. }
+            | Self::ChooseDevice { .. } => None,
         }
     }
 }
@@ -80,6 +95,20 @@ impl HerdrWindow {
         workspaces: &[SessionWorkspace],
     ) -> Option<(String, Source)> {
         resolved(&self.sessions.projects, device, session, workspaces)
+    }
+
+    /// The id of the project a session resolves to, if any.
+    pub(super) fn session_project_id(
+        &self,
+        device: &str,
+        session: &str,
+        workspaces: &[SessionWorkspace],
+    ) -> Option<ProjectId> {
+        let key = herdr_client::DeviceKey::new(device).ok()?;
+        self.sessions
+            .projects
+            .resolve(&herdr_client::SessionRef::new(key, session), workspaces)
+            .project
     }
 
     pub(super) fn local_project(&self, session: &LocalSession) -> Option<(String, Source)> {
@@ -176,7 +205,7 @@ impl HerdrWindow {
     }
 
     /// The project whose delete confirmation is showing.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn project_removal_pending(&self) -> Option<ProjectId> {
         match &self.menu.session_edit {
             Some(Edit::Project(ProjectEdit::Remove { id })) => Some(id.clone()),
@@ -185,7 +214,7 @@ impl HerdrWindow {
     }
 
     /// The user's Enter on the open project form.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn confirm_project_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.submit_project_edit(window, cx);
     }
@@ -208,7 +237,7 @@ impl HerdrWindow {
         input
     }
 
-    fn open_project_create(
+    pub(super) fn open_project_create(
         &mut self,
         row: Option<Row>,
         window: &mut Window,
@@ -251,7 +280,12 @@ impl HerdrWindow {
     ) {
         let input = self.text_input("Absolute folder path on this device", "", window, cx);
         self.menu.error = None;
-        self.menu.session_edit = Some(Edit::Project(ProjectEdit::Bind { id, device, input }));
+        self.menu.session_edit = Some(Edit::Project(ProjectEdit::Bind {
+            id,
+            device,
+            input,
+            previous: None,
+        }));
         cx.notify();
     }
 
@@ -272,7 +306,24 @@ impl HerdrWindow {
         match Projects::update(cx, change) {
             Ok(()) => {
                 self.sync_projects(cx);
-                self.cancel_session_edit(window, cx);
+                let detail = match &self.menu.session_edit {
+                    Some(Edit::Project(
+                        ProjectEdit::Bind { id, .. } | ProjectEdit::Rename { id, .. },
+                    )) => Some(id.clone()),
+                    _ => None,
+                };
+                if matches!(
+                    self.menu.session_edit,
+                    Some(Edit::Project(
+                        ProjectEdit::Move { .. } | ProjectEdit::Create { row: Some(_), .. }
+                    ))
+                ) {
+                    self.cancel_session_edit(window, cx);
+                } else if let Some(id) = detail {
+                    self.show_project_detail(id, window, cx);
+                } else {
+                    self.show_project_manager(window, cx);
+                }
             }
             Err(error) => {
                 self.menu.error = Some(error.to_string());
@@ -310,7 +361,10 @@ impl HerdrWindow {
         }
         let text = edit.input().map(|input| input.read(cx).text().to_owned());
         match edit {
-            ProjectEdit::Move { .. } => {}
+            ProjectEdit::Move { .. }
+            | ProjectEdit::Manager
+            | ProjectEdit::Detail { .. }
+            | ProjectEdit::ChooseDevice { .. } => {}
             ProjectEdit::Create {
                 row,
                 repo,
@@ -319,6 +373,19 @@ impl HerdrWindow {
             } => {
                 let (row, repo) = (row.clone(), repo.clone().filter(|_| *use_repo));
                 let name = text.unwrap_or_default();
+                if row.is_none() {
+                    match Projects::update(cx, |store| store.create_project(&name, repo)) {
+                        Ok(project) => {
+                            self.sync_projects(cx);
+                            self.choose_project_device(project.id, None, window, cx);
+                        }
+                        Err(error) => {
+                            self.menu.error = Some(error.to_string());
+                            cx.notify();
+                        }
+                    }
+                    return;
+                }
                 let device = self.endpoints[0].id.clone();
                 self.project_change(window, cx, |store| {
                     let project = store.create_project(&name, repo)?;
@@ -334,10 +401,21 @@ impl HerdrWindow {
                 let (id, name) = (id.clone(), text.unwrap_or_default());
                 self.project_change(window, cx, |store| store.rename_project(&id, &name));
             }
-            ProjectEdit::Bind { id, device, .. } => {
-                let (id, device, path) = (id.clone(), device.clone(), text.unwrap_or_default());
+            ProjectEdit::Bind {
+                id,
+                device,
+                previous,
+                ..
+            } => {
+                let (id, device, path, previous) = (
+                    id.clone(),
+                    device.clone(),
+                    text.unwrap_or_default(),
+                    previous.clone(),
+                );
                 self.project_change(window, cx, |store| {
-                    store.bind(&device, &path, &id).map(|_| ())
+                    // Validation and replacement share a single transaction.
+                    store.replace_binding(previous.as_ref(), &device, &path, &id)
                 });
             }
             ProjectEdit::Remove { id } => {
@@ -392,6 +470,9 @@ impl HerdrWindow {
                 .child(text.to_owned())
         };
         match edit {
+            ProjectEdit::Manager => self.project_manager_body(view, cx),
+            ProjectEdit::Detail { id } => self.project_detail_body(view, id, cx),
+            ProjectEdit::ChooseDevice { id, previous } => self.project_devices_body(view, id, previous.as_ref(), cx),
             ProjectEdit::Move { row } => {
                 let current = self.row_project_id(row);
                 let mut list = div().flex().flex_col().gap(px(4.));
@@ -506,12 +587,15 @@ impl HerdrWindow {
             ProjectEdit::Rename { input, .. } => {
                 view.child(title("Rename project")).child(input.clone())
             }
-            ProjectEdit::Bind { input, .. } => view
-                .child(title("Bind this device folder"))
+            ProjectEdit::Bind { id, device, input, previous } => view
+                .child(title("Bind server folder"))
+                .child(note(&format!("Server: {}", self.project_device_label(device))))
+                .child(self.modal_button("project-change-device", "project-change-device".into(), "Choose another server…", cx, {
+                    let (id, previous) = (id.clone(), previous.clone());
+                    move |this, window, cx| this.choose_project_device(id.clone(), previous.clone(), window, cx)
+                }))
                 .child(input.clone())
-                .child(note(
-                    "Sessions whose workspace is in this folder join the project on this device.",
-                )),
+                .child(note("Enter an absolute path on this server. Only the association is saved; folders are never created, moved or deleted. No connection is required.")),
             ProjectEdit::Remove { id } => {
                 let name = self
                     .sessions
@@ -537,7 +621,10 @@ impl HerdrWindow {
     /// The submit button's label for a project form, `None` for the picker.
     pub(super) fn project_submit_label(edit: &ProjectEdit) -> Option<&'static str> {
         match edit {
-            ProjectEdit::Move { .. } => None,
+            ProjectEdit::Move { .. }
+            | ProjectEdit::Manager
+            | ProjectEdit::Detail { .. }
+            | ProjectEdit::ChooseDevice { .. } => None,
             ProjectEdit::Create { .. } => Some("Create project"),
             ProjectEdit::Rename { .. } => Some("Rename"),
             ProjectEdit::Bind { .. } => Some("Bind folder"),

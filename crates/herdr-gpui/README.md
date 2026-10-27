@@ -74,21 +74,136 @@ Hovering a pane focuses it when the window is active and
 terminal input has keyboard focus. Held mouse buttons, modifiers, dragging,
 IME composition, menus, and terminal popups suppress hover focus.
 
-Each native window holds switchable logical Windows, like tmux windows. The
-strip under the title bar (shown once there is more than one, or while the
-current one is empty) switches them, and **New Window** in the strip, the
-**New Logical Window** command (palette, Window menu, `new_container`),
-and `next_container`/`previous_container` add or step through them; none has a
-default shortcut. Each logical Window keeps its own list of sessions in the left
-sidebar, one top-level row per Herdr session, several from one device included.
-**Create session** and **Add existing session** in the Sessions manager attach to
-the current logical Window; a session's own workspaces stay inside its row. The
-`×` on a row, and closing a logical Window, only remove the view: the session
-keeps running and Stop and Delete stay in the Sessions manager, where they
-cover every logical Window of every native window. Closing the last logical
-Window leaves an empty one. Logical Windows, their order, membership and
-selection are restored per native window from `window-containers.json` beside
-the geometry file. `herdr-gpui container ...` inspects and drives them.
+Windows are global, like tmux windows shared by every client: one list for the
+whole app, each with a stable id, a unique name (1-64 printable characters),
+an ordered list of sessions, a selected session, and a stored grouping
+(`none`, `project`, `status`, `mr`). Each native window shows one of them. The strip
+is shown in every non-Zen window, below the separate title bar or at the top when
+the title bar is merged into the workspace tabs. At the top it reserves the native
+title-bar height and macOS traffic-light clearance. Even a single populated Window keeps a
+visible place to add to it; it switches this native window's Window and ends
+with two fixed entries, **+ Add session** (the same **Sessions** picker as
+`Cmd-Shift-S` / `Ctrl-Shift-S`, attaching the chosen session to this Window)
+and **+ New Window**, which creates an empty logical Window. The **New Logical
+Window** command (palette, Window menu, `new_container`) and
+`next_container`/`previous_container` also add or step through Windows; those
+three commands have no default shortcut. A Window lists its sessions in the
+left sidebar, one top-level row per Herdr session, several from one device
+included; a session is identified by device and name, so one name on two
+devices stays two rows.
+**Create session** and **Add existing session** in the Sessions manager attach
+to the shown Window; a session's own workspaces stay inside its row. The `×`
+on a row, and closing a Window, only remove the view: the session keeps running
+and Stop and Delete stay in the Sessions manager, where they cover every Window
+of every native window (deleting a session lists the device's default session
+in its place). Closing the last Window leaves an empty default one.
+
+The same Window may be open in several native windows at once. Each native
+window keeps its own connections, so selection and activation stay independent
+there, while membership, names, order and grouping are shared: an edit in one
+native window (or by the CLI) reaches the others within a poll tick. Closing a
+Window other native windows show moves them to a neighbor. Windows are saved in
+`windows.json` in the state directory. Multiple app instances sharing
+`windows.json` or `projects.json` lock, reread and merge changes on the background
+writer before saving, so independent edits are preserved. Successful session
+deletion and permanent device removal also clear their paused state and project
+assignments/bindings. Concurrent closes never discard a newly attached member;
+merges exceeding the Window/member limits or conflicting project names are
+refused rather than dropping data. Windows are versioned and bounded; a corrupt,
+oversized or unknown-version file starts empty and is kept as `windows.json.bad` before
+the first save. Version 2 adds the sessions the user stopped (`paused`); it is
+written only while one is stopped, so a file without any stays version 1, and
+both versions are read. A stopped session stays stopped after a restart and
+dials again only when it is selected again; which Window each native window shows is restored in native
+window order from `window-shown.json`. A pre-existing per-window
+`window-containers.json` is migrated once into global Windows (same names get a
+number) and renamed `window-containers.json.migrated`. `herdr-gpui container
+...` inspects and drives them.
+
+**Managing Windows.** Right-click a Window's tab in the strip, or use the `…`
+on the shown one, for **Create session** and **Add existing session**, which
+switch to that Window (if it is not the shown one) and open the Sessions
+picker — Create straight on the new-session form, Add on the session list —
+so the chosen session lands in the Window the menu was opened on. Create is
+disabled with a reason when local creation is unavailable (an explicit
+`--socket` or `--dev` target, or another session change still finishing); Add
+existing is always offered. The same menu lets you **Rename** it (names stay
+unique), **Close** it, or choose **Group by** None, Project, Status or Merge
+request (`mr`). Close is offered only for a Window with no sessions, as
+`container close` refuses a non-empty one (detach its sessions first); the `×`
+on a tab follows the same rule. Rename, close and group call the same registry
+operations as `herdr-gpui container rename|close|group`.
+The tabs scroll independently of the fixed Add/New entries. Long titles
+truncate with a tooltip; the action menu stays inside the viewport and scrolls
+when needed for a large UI font. Keyboard navigation reveals the selected row,
+and unavailable actions show their reason in a tooltip or after Enter.
+
+The native **Window > Sessions** item opens the same picker with the existing
+Sessions shortcut: `Cmd-Shift-S` on macOS and `Ctrl-Shift-S` on Linux (unless
+rebound). It replaces any open tab menu and targets the currently shown Window,
+not another tab whose menu was open. An empty Window also offers **Create
+session** and **Add existing session**; unavailable local creation shows its
+reason in the Create tooltip.
+
+**Sidebar grouping.** With a Window's grouping set to `project` or `status`
+the sidebar draws a heading over each run of that Window's sessions; the
+heading shows a fold arrow, the group name and the session count, and a click
+folds it. Grouping is a display projection only: the Window's member order is
+never rewritten, sessions keep that order inside a group, and groups sit in a
+fixed order (projects by name with "No project" last; statuses Waiting,
+Working, Idle, Disconnected, Stopped). `none` paints the flat list as before,
+and `mr` groups by pull request state (below). Folded groups are local to the native window, are
+not saved, and only workspace stepping skips them; agent stepping and the agent panel still
+include the sessions of a folded group. The device filter and the search
+box apply before grouping (an empty group has no heading); search results stay
+flat. A session's project is its explicit assignment, else its saved
+workspaces resolved against the projects registry. Successful session scans
+automatically register missing projects: normalized Git remotes join clones
+and worktrees across devices; without a remote, an absolute saved repository
+root (or workspace path) becomes a device-local path project. Explicit
+assignments and manual path bindings keep priority. Inferred paths never
+override later Git metadata. Discovery is persisted in `projects.json`; deleting
+a project does not suppress discovery, so a later scan may recreate it. Path
+projects left behind when Git metadata becomes available are not deleted
+automatically. Missing or invalid paths remain unclassified.
+Those workspaces are read by background workers (this machine's `session.json`
+listing, one CLI round trip per remote device, never starting a session), cached,
+and refreshed every 30 seconds or at once when the Window gains a session, a
+device's host changes or the development flag flips; painting only reads the
+cache, and a device that fails to answer keeps its last answer. Discovery uses
+that bounded scan's Git metadata, never probes remote paths locally, and never
+starts additional SSH requests. **MR grouping.** `mr` puts each
+session in the group its saved workspaces' GitHub pull requests add up to:
+Checks failing, Changes requested, Draft, Checks pending, Review required,
+Approved, Open, No pull request, Merged, Closed, Unknown, Over lookup limit,
+Unsupported (in that order; a session with any workspace over the limit is
+never read as settled). Over lookup limit appears when the Window wants more
+than 256 pull request lookups: the first 256 in key order are asked and the
+rest are not, rather than shown as an Unknown that looks still on its way. Each workspace's real branch, detached HEAD, `origin`/`upstream`
+remote and the branch's upstream head are read by a read-only git probe on the
+device that owns the checkout (this machine or an SSH device), so a detached
+HEAD and a failed probe are different answers, and a fork's same-named branch
+is a different lookup. Lookups are keyed by provider, host, base repository,
+head repository and branch, and account; sessions sharing a head share one
+query, which runs in batches on one background worker only while the shown
+Window groups by `mr` (it stops when the grouping changes), reusing the pull
+request menu's GraphQL client and sign-in. Painting only reads the cache. A
+failed refresh keeps the last good answer and marks it stale; a session never
+asked yet is Unknown, never "No pull request". While the shown Window groups by
+`mr`, each of its member sessions in the Sessions list also carries a compact
+badge read from the same cache (bucket, first PR number, `mixed`, `stale`);
+other Windows' groupings and non-member sessions show no badge. GitLab remotes and WSL or cloud
+devices are Unsupported, including a session of such a device that has no
+workspaces to list. A session with several workspaces keeps all of them and
+shows the most urgent state: any known open pull request decides it in the
+order above; otherwise a workspace that is over the lookup limit, not yet
+known, or Unsupported (in that order) keeps it from reading Merged, Closed or
+No pull request. Status comes from the live
+connection and agents: Stopped (disabled or detached), Disconnected (not
+connected), else Waiting (an agent is blocked), Working, or Idle. Sessions are
+reordered only by `container move` (or the Window's member list), never by
+dragging a row, so a grouped sidebar cannot move a session across groups;
+dragging a workspace still reorders it within its own session.
 
 Normal launches restore the main windows left open at quit, including each
 window's size and screen position, using the current launch's connection options.
@@ -185,14 +300,24 @@ switches the terminal through the existing surface handoff. While filtered,
 navigation to another device follows that device; removal or disable falls back
 to Local. The filter is window-local and starts at All Devices. The adjacent gear
 opens the existing Settings page (also available with `Cmd-,`). Beside it, the
-sessions icon (or `Cmd-Shift-S`, or `herdr-gpui run sessions`) opens the one
-Sessions manager. It lists this machine's sessions and each saved device's own,
-grouped under the device (the device this window is on leading) and then under
+sessions icon (or `Cmd-Shift-S` on macOS, `Ctrl-Shift-S` on Linux, or
+`herdr-gpui run sessions`) opens the one Sessions manager. It lists this
+machine's sessions and each saved device's own, grouped under the device
+(the device this window is on leading) and then under
 the project each session saved. The search field is focused on open and matches
 every word, case-insensitively, against the device, session name, state, and the
 project, path, branch and label of every saved workspace, so a hashed `dx wt`
 session is found by its repository or branch. **All / Running / Stopped**
-filter by state (Tab cycles them); large results are shown 100 sessions per
+filter by state (Tab cycles them). **Device** (this machine or any saved
+device) and **Project** (any project of the global registry, or **No project**
+for sessions that resolve to none) are two more filters under the search field;
+they, the state filter and the search text all apply together. **Expand** turns
+the popover into a page-sized layout that fills the window below the title bar
+(**Compact** returns); it is the same view, not a separate page, because the app
+has no full-window page mode for menus (Devices Overview, Review and
+Orchestrator are tab pages bound to a workspace, which the manager is not).
+`herdr-gpui sessions --device DEVICE --project PROJECT|--no-project` opens it
+with those filters. Large results are shown 100 sessions per
 page (Page Up / Page Down or **Previous / Next**), and a new search or filter
 returns to page one. Workspace paths and labels come from `session.json`;
 read-only Git probes group linked worktrees by their common repository and
@@ -231,13 +356,21 @@ touches a folder or Git worktree; deleting a project only forgets it, its
 bindings and its assignments.
 
 The Sessions manager groups each device's sessions by project, offers a
-per-row project picker, and creates, renames, binds and deletes projects in its
-own dialogs. Projects are shared by every window of the app and are stored
-only on this machine, in `projects.json` in the state directory; no daemon or
+per-row **Project…** button (always visible on every session row, tooltip
+"Change which project this session belongs to"), and creates, renames,
+binds and deletes projects in its own dialogs. The toolbar always shows
+**New project…**, including when no project exists yet and the list is
+flat; with no project defined the list also says so and points at that
+button and **Project…**. **New project…** opens the create dialog with no
+session to assign; the same dialog opens from a session's **Project…**
+picker via **New project…**, which then also assigns that session.
+Projects are shared by every window of the app and are stored only on
+this machine, in `projects.json` in the state directory; no daemon or
 remote host ever sees them. A missing file is an empty registry. A corrupt,
 oversized or newer-version file also starts empty and is kept as
-`projects.json.bad` before the first change overwrites it. A device is named
-by its endpoint id: `local`, `ssh:<id>`, or `wsl:<distro>`.
+`projects.json.bad` before the first change overwrites it. A device is
+named by its endpoint id: `local`, `ssh:<id>`,
+or `wsl:<distro>`.
 
 The same operations are available to scripts and agents as
 `herdr-gpui project ...`: `list`, `create NAME [--repo KEY|URL | --task]`,
@@ -255,6 +388,12 @@ there are two or more devices (or one is being added), or `"never"` to leave it
 out; the default is `"always"`. Without the footer, the Agents list takes its
 height, Settings and Sessions keep their shortcuts and palette entries, and
 **Devices Overview** in the palette still offers **Add Device**.
+
+The compact Sessions picker uses the available space beside its entry point:
+the Window strip's **Add session** opens downward, while the sidebar footer
+opens upward. It stays inside the window even at narrow sizes, with session
+rows scrolling beneath the fixed search and filters. Expanded mode keeps its
+page-sized layout.
 
 The current session has an accent highlight; status dots and delete icons stay
 aligned across rows. The **Add session…** row has no status dot.

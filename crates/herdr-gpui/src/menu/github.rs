@@ -38,7 +38,7 @@ impl HerdrWindow {
     fn github_host(&self) -> Option<&str> {
         let endpoint = &self.endpoints[self.selected_endpoint];
         matches!(endpoint.connection.target, ConnectTarget::Ssh { .. })
-            .then_some(endpoint.id.as_str())
+            .then_some(endpoint.device_id())
             .filter(|id| self.menu.github_hosts.contains_key(*id))
     }
 
@@ -84,7 +84,8 @@ impl HerdrWindow {
         let hosts = &mut self.menu.github_hosts;
         hosts.retain(|id, _| {
             self.endpoints.iter().any(|endpoint| {
-                &endpoint.id == id
+                endpoint.slot.is_none()
+                    && endpoint.device_id() == id
                     && matches!(endpoint.connection.target, ConnectTarget::Ssh { .. })
             })
         });
@@ -93,19 +94,20 @@ impl HerdrWindow {
             return;
         }
         for endpoint in &self.endpoints {
-            if !matches!(endpoint.connection.target, ConnectTarget::Ssh { .. })
-                || hosts.contains_key(&endpoint.id)
+            if endpoint.slot.is_some()
+                || !matches!(endpoint.connection.target, ConnectTarget::Ssh { .. })
+                || hosts.contains_key(endpoint.device_id())
             {
                 continue;
             }
             let Some(account) =
-                crate::endpoint::saved_profile_id(&endpoint.id).and_then(Account::host)
+                crate::endpoint::saved_profile_id(endpoint.device_id()).and_then(Account::host)
             else {
                 continue;
             };
             let mut auth = Auth::for_account(account);
             auth.initialize(&self.config);
-            hosts.insert(endpoint.id.clone(), auth);
+            hosts.insert(endpoint.device_id().to_owned(), auth);
         }
     }
 

@@ -38,6 +38,12 @@ impl PendingInput {
 
 impl HerdrWindow {
     pub(crate) fn send(&mut self, event: ClientPaneInputEvent, cx: &mut Context<Self>) {
+        // An empty Window shows no terminal: nothing is sent or held for the
+        // session still connected behind it.
+        if self.container_is_empty() {
+            self.clear_pending_input();
+            return;
+        }
         if self.menu.page.is_some() || self.mouse_focus_pending() {
             return;
         }
@@ -106,6 +112,10 @@ impl HerdrWindow {
     /// discard it if focus moved during the gap. Returns whether the
     /// projection is coherent, so the caller may send after held input.
     pub(crate) fn flush_pending_input(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.container_is_empty() {
+            self.clear_pending_input();
+            return false;
+        }
         if !self.input_ready() {
             return false;
         }

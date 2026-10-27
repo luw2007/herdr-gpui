@@ -849,7 +849,7 @@ impl Render for HerdrWindow {
                 root.children(self.render_worktree_banner())
             })
             .when(self.container_strip_shown() && !zen, |root| {
-                root.child(self.render_container_strip(cx))
+                root.child(self.render_container_strip(merged, window, cx))
             })
             .child(
                 div()
@@ -887,6 +887,7 @@ impl Render for HerdrWindow {
             })
             .children(self.render_toasts(window, cx))
             .children(self.render_file_transfer(window, cx))
+            .children(self.render_container_menu(window, cx))
             .when(self.menu.page.is_some(), |root| {
                 root.child(self.render_menu(window, cx))
             });

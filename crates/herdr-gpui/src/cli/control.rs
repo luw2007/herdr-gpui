@@ -107,6 +107,10 @@ pub enum ControlCommand {
     },
     Sessions {
         query: String,
+        device: Option<String>,
+        project: Option<String>,
+        /// `--no-project`: only sessions that resolve to no project.
+        unassigned: bool,
     },
     Project(ProjectCommand),
     Commands,
@@ -199,7 +203,7 @@ pub const FAMILIES: &[(&str, &str)] = &[
     ("commands", "List the commands `run` accepts"),
     (
         "sessions",
-        "Open the Sessions manager, optionally filtering its project index",
+        "Open the Sessions manager, optionally filtered by text, device and project",
     ),
     (
         "project",
@@ -214,11 +218,28 @@ pub const FAMILIES: &[(&str, &str)] = &[
 /// Whether `args` are a control command asking for JSON, whose errors,
 /// usage errors included, are then printed as JSON.
 pub fn wants_json(args: &[OsString]) -> bool {
-    args.first().is_some_and(is_family) && args.iter().any(|arg| arg == "--json")
+    family_position(args).is_some() && args.iter().any(|arg| arg == "--json")
 }
 
 pub fn is_family(word: &OsString) -> bool {
     FAMILIES.iter().any(|(name, _)| word == *name)
+}
+
+/// A control family may follow its global output and window options. A window
+/// value is never mistaken for a family; normal launch options remain separate.
+pub(super) fn family_position(args: &[OsString]) -> Option<usize> {
+    let mut index = 0;
+    while let Some(word) = args.get(index) {
+        if is_family(word) {
+            return Some(index);
+        }
+        match word.to_str() {
+            Some("--json") => index += 1,
+            Some("--window") => index += 2,
+            _ => return None,
+        }
+    }
+    None
 }
 
 /// The longest wait any command accepts, in seconds.
@@ -383,13 +404,24 @@ fn command(family: &'static str, args: &mut Args) -> Result<ControlCommand, CliE
             name: args.required_text("COMMAND")?,
         },
         "sessions" => {
+            let device = args.text_option("--device")?;
+            let project = args.text_option("--project")?;
+            let unassigned = args.flag("--no-project");
+            if unassigned && project.is_some() {
+                return Err(CliError::InvalidValue("--project with --no-project"));
+            }
             let query = args.words()?.unwrap_or_default();
             if !crate::control::valid_session_query(&query) {
                 return Err(CliError::InvalidValue(
                     "QUERY (printable, at most 4096 bytes)",
                 ));
             }
-            ControlCommand::Sessions { query }
+            ControlCommand::Sessions {
+                query,
+                device,
+                project,
+                unassigned,
+            }
         }
         "commands" => ControlCommand::Commands,
         "logs" => ControlCommand::Logs {

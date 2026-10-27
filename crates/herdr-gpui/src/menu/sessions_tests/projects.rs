@@ -14,6 +14,7 @@ fn workspace(path: &str, repo: Option<&RepoKey>) -> SessionWorkspace {
         branch: None,
         label: None,
         repo: repo.cloned(),
+        ..Default::default()
     }
 }
 
@@ -24,7 +25,7 @@ fn saved(name: &str, workspaces: Vec<SessionWorkspace>) -> LocalSession {
     }
 }
 
-fn repo() -> RepoKey {
+pub(super) fn repo() -> RepoKey {
     RepoKey::from_remote_url("https://github.com/acme/app.git").unwrap()
 }
 
@@ -37,7 +38,7 @@ fn type_query(cx: &mut VisualTestContext, query: &str) {
 }
 
 /// Headings and rows in paint order.
-fn layout(view: &Entity<crate::HerdrWindow>, cx: &mut VisualTestContext) -> Vec<String> {
+pub(super) fn layout(view: &Entity<crate::HerdrWindow>, cx: &mut VisualTestContext) -> Vec<String> {
     cx.update(|_, cx| {
         view.read(cx)
             .session_entries()
@@ -56,11 +57,11 @@ fn layout(view: &Entity<crate::HerdrWindow>, cx: &mut VisualTestContext) -> Vec<
     })
 }
 
-fn local_id(view: &Entity<crate::HerdrWindow>, cx: &mut VisualTestContext) -> String {
+pub(super) fn local_id(view: &Entity<crate::HerdrWindow>, cx: &mut VisualTestContext) -> String {
     cx.update(|_, cx| view.read(cx).endpoints[0].id.clone())
 }
 
-fn catalog() -> Vec<LocalSession> {
+pub(super) fn catalog() -> Vec<LocalSession> {
     vec![
         saved("a-task", vec![workspace("/tasks/alpha/src", None)]),
         saved("b-repo", vec![workspace("/code/app.wt/x", Some(&repo()))]),
@@ -69,7 +70,7 @@ fn catalog() -> Vec<LocalSession> {
     ]
 }
 
-fn create(cx: &mut VisualTestContext, name: &str, repo: Option<RepoKey>) -> ProjectId {
+pub(super) fn create(cx: &mut VisualTestContext, name: &str, repo: Option<RepoKey>) -> ProjectId {
     cx.update(|_, cx| {
         Projects::update(cx, |store| store.create_project(name, repo))
             .unwrap()

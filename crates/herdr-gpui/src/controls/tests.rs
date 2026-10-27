@@ -105,6 +105,7 @@ fn catalog_has_all_native_commands_and_gpui_shortcuts() {
         (ReloadConfig, &[]),
         (Keybinds, &["cmd-/"]),
         (Sessions, &["cmd-shift-s"]),
+        (ProjectManager, &[]),
         (Themes, &[]),
         (WorkspacePicker, &["cmd-p"]),
         (Palette, &["cmd-shift-p"]),
@@ -195,6 +196,7 @@ fn gui_commands_never_send_daemon_requests() {
         Command::Settings,
         Command::Keybinds,
         Command::Sessions,
+        Command::ProjectManager,
         Command::Themes,
         Command::WorkspacePicker,
         Command::Palette,
@@ -566,4 +568,16 @@ fn tab_moves_wrap_and_stay_in_workspace() {
     s.focused_tab_id = Some("a".into());
     assert!(request(Command::MoveTabNext, &s).is_none());
     assert!(request(Command::MoveTabPrevious, &s).is_none());
+}
+
+#[test]
+fn projects_manager_is_a_named_unbound_native_action() {
+    let info = COMMANDS
+        .iter()
+        .find(|info| info.command == Command::ProjectManager)
+        .expect("Projects must be available to the palette and run command");
+    assert_eq!(info.name, "project_manager");
+    assert_eq!(info.label, "Projects");
+    assert!(info.base_shortcuts().is_empty());
+    assert!(request(info.command, &snapshot()).is_none());
 }

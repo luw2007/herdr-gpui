@@ -52,7 +52,21 @@ delete_local_session(executable: &Path, name: &str) -> Result<()>
 delete_remote_session(target: &str, name: &str) -> Result<()>
 stop_local_session(executable: &Path, name: &str) -> Result<()>      // keeps saved state, never deletes
 stop_remote_session(target: &str, name: &str) -> Result<()>
-SessionWorkspace { project, path, branch: Option, label: Option }  // workspaces: saved session.json context (may lag), refined by cached read-only git probes (project = common repo, branch = live HEAD); empty = unclassified
+SessionWorkspace { project, path, branch: Option, label: Option, repo: Option<RepoKey>, head: HeadState, upstream: Option<Upstream> }  // head = Saved (not probed) / Branch / Detached / Unavailable (probe failed), so branch None alone never means detached; upstream = the tracked remote branch; workspaces: saved session.json context (may lag), refined by cached read-only git probes (project = common repo, branch = live HEAD); empty = unclassified
+Registry { projects, bindings, inferred_paths, assignments }  // pure GUI-local state, no file access or protocol; JSON envelope version 1 (no inferred_paths) or 2 (with it); strict decode, sorted deterministic output
+Registry::new() / is_empty() / project(id) / project_for_repo(repo) / projects()
+Registry::create_project(name, Option<RepoKey>) -> Project  // manual project with a random v4 id
+Registry::rename_project(id, name) / remove_project(id)
+Registry::bind(device, path, &id) / unbind(device, path)  // manual per-device path bindings only
+Registry::bindings_of(id) -> Vec<Binding>                 // manual bindings
+Registry::inferred_paths_of(id) -> Vec<Binding>           // what discover inferred
+Registry::inferred_path(device, path) -> Option<&ProjectId>
+Registry::assign(session, &id) / unassign(session) / assignment(session) / assignments_of(id)
+Registry::resolve(session, &[SessionWorkspace]) -> Resolution { project, source: Assigned | Path(path) | Repository(repo) }
+Registry::discover(session, &[SessionWorkspace]) -> Result<bool, ProjectError>  // one session
+Registry::discover_sessions(impl Iterator<Item=(&SessionRef, &[SessionWorkspace])>) -> Result<bool, ProjectError>  // batch, one clone, commit-on-change
+Registry::merge(base, mine, theirs) / forget_device(device)
+ProjectError::LimitReached(Limit::Projects | Bindings | Assignments)
 ConnectOptions { surface_size: ClientSurfaceSize, cell_width_px: u32, cell_height_px: u32 }
 HostTheme { pub foreground: ClientHostColor, pub background: ClientHostColor, pub palette: [ClientHostColor; 256], pub appearance: ClientHostAppearance }
 ```
@@ -81,6 +95,36 @@ paths; later passes continue with the remaining paths. Local Git work has a
 five-second total deadline. SSH listing and Git enrichment each have a
 30-second deadline, and failures in enrichment retain saved context. All of
 this work belongs off the UI thread.
+
+The project registry turns that workspace context into projects.
+`Registry::resolve` decides in order: (1) an explicit assignment; else the
+saved workspaces, first that resolves wins, and within one workspace (2) the
+longest manual binding on the session's device that covers the workspace path
+or its repository root, then (3) the project of the workspace's repository
+remote, then (4) the longest inferred path binding. `Registry::discover` and
+`Registry::discover_sessions` provision whatever is still missing: for the
+first unresolved workspace of a session, its repository's project is created
+or reused (so clones on every device join without setup), or, without a
+repository, its saved common root (`SessionWorkspace.project`, else `path`)
+becomes an inferred path on that device. Manual assignments and bindings are
+never changed; a manual binding simply shadows an inferred one. Inferred
+paths live in the registry's separate `inferred_paths` map and are serialized
+only when nonempty as a version-2 envelope (a registry without them still
+writes version 1, which v1 readers accept). Manual and inferred paths share
+the `MAX_BINDINGS` cap.
+
+Discovered projects have stable, deterministic identities: a version-5 UUID
+derived from the repository key or from `(device, root)` under a fixed
+namespace, and a name of `<tail> · <id-hex>` (8 hex digits, 12 or 32 if that
+is taken by another project). Two windows that discover the same thing from
+empty registries therefore arrive at the same id and name and merge into one
+project; deleting a discovered project is safe because the next scan
+rebuilds it identically. Fallback roots must be absolute and normalized
+(a file-system root `/`, `C:\` or a bare `\\server` is rejected, and `.`/`..`
+segments are skipped) and are never checked against the file system — they
+are pure metadata. A workspace with nothing usable is skipped, not guessed
+into a project. Discovery is transactional per call: the registry is staged
+and only committed if every session succeeds.
 
 `ClientHandle` is cloneable. Its exact methods are:
 

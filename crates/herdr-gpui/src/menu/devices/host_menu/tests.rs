@@ -81,6 +81,49 @@ fn right_clicking_a_saved_host_offers_removal_but_local_has_no_menu(cx: &mut Tes
     assert!(view.read_with(cx, |view, _| view.menu.page.is_none()));
 }
 
+/// A session header's slot id opens the menu of the device that owns it.
+#[gpui::test]
+fn a_session_header_opens_its_devices_menu(cx: &mut TestAppContext) {
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        let mut view = fixture_window(window, cx);
+        add_host(&mut view);
+        let mut slot = crate::endpoint::Endpoint::new(
+            format!("slot:{HOST}:work"),
+            "m5max-ms".into(),
+            herdr_client::ConnectTarget::Ssh {
+                target: "penso@box".into(),
+                session: "work".into(),
+            },
+            true,
+        );
+        slot.slot = Some(herdr_client::SessionRef::new(
+            herdr_client::DeviceKey::new(HOST).unwrap(),
+            "work",
+        ));
+        view.endpoints.push(slot);
+        view
+    });
+    cx.update(|window, cx| {
+        view.update(cx, |view, cx| {
+            view.open_host_menu(&format!("slot:{HOST}:work"), Default::default(), window, cx);
+        });
+    });
+    // Saved SSH devices are unavailable on Windows, so there is nothing to open.
+    if cfg!(windows) {
+        return;
+    }
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.menu.page, Some(Page::Host));
+        assert_eq!(host(view).id, HOST);
+        assert_eq!(
+            host(view).saved,
+            Saved::Ssh {
+                profile: "0123456789abcdef0123456789abcdef".into()
+            }
+        );
+    });
+}
+
 /// The opt-in reads the device's saved choice, and a device on local keys
 /// despite opting in says why. Activating the row saves the GUI config, so
 /// this only checks what the menu shows.

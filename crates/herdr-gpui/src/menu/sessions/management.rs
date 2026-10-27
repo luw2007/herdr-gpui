@@ -21,6 +21,8 @@ pub(in crate::menu) enum Edit {
     Delete {
         row: Row,
         target: Target,
+        /// Captured at confirmation; cleanup of the app's registries uses it.
+        session: herdr_client::SessionRef,
     },
     Project(ProjectEdit),
 }
@@ -32,6 +34,19 @@ impl HerdrWindow {
                 self.endpoints[0].connection.target,
                 ConnectTarget::Socket(_)
             )
+    }
+
+    /// Why a new local session cannot be created right now, if it cannot. The
+    /// rule lives here once so the Window strip and tab menu reuse the exact
+    /// reason the Sessions picker's Add row uses, instead of inventing one.
+    pub(crate) fn local_create_unavailable_reason(&self) -> Option<&'static str> {
+        if self.sessions.mutation.is_some() {
+            return Some("Wait for the current session change to finish.");
+        }
+        if !self.local_management_available() {
+            return Some("Unavailable with --socket or --dev");
+        }
+        None
     }
 
     pub(super) fn add_session_entry(&self, target: Target) -> Entry {
@@ -73,9 +88,7 @@ impl HerdrWindow {
     /// route, and an offline host would only fail after the form is filled in.
     fn create_unavailable(&self, target: &Target) -> Option<&'static str> {
         match target {
-            Target::Local => {
-                (!self.local_management_available()).then_some("Unavailable with --socket or --dev")
-            }
+            Target::Local => self.local_create_unavailable_reason(),
             Target::Device { host, .. } if !host_available(host) => Some(match host {
                 RemoteHost::Ssh(_) => "SSH is unavailable on Windows",
                 RemoteHost::Wsl(_) => "WSL is only available on Windows",
@@ -178,9 +191,15 @@ impl HerdrWindow {
         }
         if let Some(reason) = self.session_delete_reason(&row) {
             self.sessions.mutation_error = Some(reason.into());
-        } else if let Some(target) = self.management_target(&row) {
+        } else if let Some(target) = self.management_target(&row)
+            && let Some(session) = self.deleted_session_ref(&row)
+        {
             self.menu.error = None;
-            self.menu.session_edit = Some(Edit::Delete { row, target });
+            self.menu.session_edit = Some(Edit::Delete {
+                row,
+                target,
+                session,
+            });
             window.focus(&self.menu.focus, cx);
         }
         cx.notify();
@@ -253,7 +272,11 @@ impl HerdrWindow {
                 let (row, target) = (row.clone(), target.clone());
                 self.submit_session_stop(row, target, window, cx);
             }
-            Edit::Delete { row, target } => {
+            Edit::Delete {
+                row,
+                target,
+                session: deleted,
+            } => {
                 if self.management_target(row).as_ref() != Some(target) {
                     self.menu.error = Some("The device changed. Reopen the session picker.".into());
                     cx.notify();
@@ -269,6 +292,7 @@ impl HerdrWindow {
                     Row::Add(_) => return,
                 };
                 let target = target.clone();
+                let deleted = deleted.clone();
                 let connection = match &target {
                     Target::Local => ConnectTarget::Session {
                         name: name.clone(),
@@ -276,14 +300,8 @@ impl HerdrWindow {
                     },
                     Target::Device { host, .. } => host.target(name.clone()),
                 };
-                // Retire old inboxes before stopping the daemon, so no window
-                // of this app can reconnect to and recreate the name being
-                // deleted. Other windows pause (the one mid-update is skipped);
-                // this one moves to default.
                 let current = window.window_handle().window_id();
-                self.pause_session_in_other_windows(&connection, current, cx);
-                self.retarget_session_in_other_windows(&connection, current, cx);
-                if self.retarget_session_for_deletion(&connection) {
+                if self.retire_session_for_deletion(&connection, current, cx) {
                     self.reconnect(cx);
                     self.menu.page = Some(Page::Sessions);
                     self.menu.selected = Some(0);
@@ -315,6 +333,9 @@ impl HerdrWindow {
                     }
                     let _ = this.update(cx, |this, cx| {
                         this.finish_session_departure();
+                        if result.is_ok() {
+                            this.forget_deleted_session(&deleted, cx);
+                        }
                         this.sessions.mutation = None;
                         this.sessions.mutation_target = None;
                         this.sessions.mutation_error = result.err().map(|error| error.to_string());
@@ -412,6 +433,20 @@ impl HerdrWindow {
             _ => None,
         };
         let submit = (project_label != Some(None)).then_some(());
+        if matches!(&self.menu.session_edit, Some(Edit::Project(edit))
+            if !matches!(edit, ProjectEdit::Manager | ProjectEdit::Move { .. }))
+        {
+            view = view.child(
+                div()
+                    .id("project-all-projects")
+                    .debug_selector(|| "project-all-projects".into())
+                    .cursor_pointer()
+                    .child("← All projects")
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.show_project_manager(window, cx);
+                    })),
+            );
+        }
         view.child(
             div()
                 .flex()
@@ -467,8 +502,12 @@ impl HerdrWindow {
     }
 }
 
+mod delete;
 mod stop;
 
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod delete_tests;
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod stop_tests;
