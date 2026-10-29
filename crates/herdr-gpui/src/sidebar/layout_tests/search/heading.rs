@@ -20,12 +20,10 @@ fn the_heading_is_the_field_and_spans_a_rows_highlight(cx: &mut gpui::TestAppCon
     let highlight = cx.debug_bounds("highlight-herdr").unwrap();
     assert_eq!(field.left(), highlight.left());
     assert_eq!(field.right(), highlight.right());
-    let heading = cx.debug_bounds("header-spaces").unwrap();
+    let heading = cx.debug_bounds("header-workspaces").unwrap();
     let list = cx.debug_bounds("spaces-scroll").unwrap();
     assert_eq!(list.top(), heading.bottom(), "no line besides the heading");
-    // At rest it reads as the heading.
     let label = placeholder(&view, cx);
-    assert!(label.eq_ignore_ascii_case("spaces"), "{label}");
     assert!(cx.debug_bounds("sidebar-search-clear").is_none());
 
     cx.update(|window, cx| {

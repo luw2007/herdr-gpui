@@ -543,6 +543,7 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         container_restore_pending: false,
         containers_dirty: false,
         container_menu: None,
+        space_overview: None,
         window_id: window.window_handle().window_id(),
         endpoints: vec![crate::endpoint::Endpoint::new(
             crate::endpoint::LOCAL.into(),

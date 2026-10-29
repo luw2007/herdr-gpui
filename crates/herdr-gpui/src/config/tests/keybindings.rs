@@ -149,8 +149,8 @@ fn keybindings_override_defaults_and_reject_bad_entries() -> anyhow::Result<()> 
         crate::controls::platform_default("cmd-t")
     );
     // A command this build does not have is ignored, not fatal.
-    let config = Config::parse("[keybindings]\nnew_space = \"cmd-n\"\nthemes = \"cmd-k\"")?;
-    assert_eq!(config.unknown_keys, ["keybindings.new_space"]);
+    let config = Config::parse("[keybindings]\nnew_spaces = \"cmd-n\"\nthemes = \"cmd-k\"")?;
+    assert_eq!(config.unknown_keys, ["keybindings.new_spaces"]);
     assert_eq!(config.keybindings.primary(Command::Themes), "cmd-k");
     assert!(matches!(
         Config::parse("[keybindings]\nnew_tab = \"t\""),

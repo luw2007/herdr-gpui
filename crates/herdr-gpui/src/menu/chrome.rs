@@ -22,6 +22,9 @@ impl HerdrWindow {
     }
 
     pub(crate) fn open_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if self.space_overview.is_some() {
+            return false;
+        }
         self.shift_taps.cancel();
         if !self.cancel_theme_preview(cx) {
             return false;

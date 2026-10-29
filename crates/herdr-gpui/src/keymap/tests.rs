@@ -112,8 +112,8 @@ fn configured_keystroke_moves_from_its_default_owner() {
 fn invalid_configuration_reports_the_command() {
     let error = |entries: &[(&str, Binding)]| with(entries).unwrap_err();
     assert!(matches!(
-        error(&[("new_space", one("cmd-n"))]),
-        Error::UnknownKeybinding(name) if name == "new_space"
+        error(&[("new_spaces", one("cmd-n"))]),
+        Error::UnknownKeybinding(name) if name == "new_spaces"
     ));
     let invalid = error(&[("new_tab", one("cmd-n-t"))]);
     assert!(std::error::Error::source(&invalid).is_some());

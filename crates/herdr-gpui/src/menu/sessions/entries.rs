@@ -36,12 +36,18 @@ impl HerdrWindow {
         let query = catalog::Query::new(self.session_query());
         let scope = self.session_scope();
         let narrowed = scope.narrows(&query);
+        let chosen = scope.facets.device.as_deref();
         let mut entries = Vec::new();
         if let Some(error) = &self.sessions.mutation_error {
             entries.push(Entry::Error(error.clone()));
         }
+        // A device choice selects the sections it keeps before any of them is
+        // built: the notes, scan errors and Add actions of the others never
+        // reach the list, and a kept one still reports its own scan.
         let mut sections: Vec<Vec<Entry>> = Vec::new();
-        if let Some(endpoint) = self.endpoints.get(current).filter(|_| current != 0) {
+        if let Some(endpoint) = self.endpoints.get(current).filter(|_| current != 0)
+            && scope.facets.admits_device(&endpoint.id)
+        {
             let mut section = vec![Entry::Header {
                 selector: "sessions-current-device".to_owned(),
                 text: format!("{} · CURRENT DEVICE", endpoint.label.to_uppercase()),
@@ -49,22 +55,30 @@ impl HerdrWindow {
             self.device_entries(&mut section, endpoint, &query, &scope);
             sections.push(section);
         }
-        let mut local = vec![Entry::Header {
-            selector: "sessions-local-header".to_owned(),
-            text: "LOCAL SESSIONS".to_owned(),
-        }];
-        self.local_entries(&mut local, &query, &scope);
-        // This machine's scan error belongs to its own section, not to the device
-        // sections that follow it.
-        if let Some(error) = &self.sessions.error {
-            local.push(Entry::Error(error.clone()));
+        if scope.facets.admits_device(&self.endpoints[0].id) {
+            let mut local = vec![Entry::Header {
+                selector: "sessions-local-header".to_owned(),
+                text: "LOCAL SESSIONS".to_owned(),
+            }];
+            self.local_entries(&mut local, &query, &scope);
+            // This machine's scan error belongs to its own section, not to the
+            // device sections that follow it.
+            if let Some(error) = &self.sessions.error {
+                local.push(Entry::Error(error.clone()));
+            }
+            sections.push(local);
         }
-        sections.push(local);
         let others: Vec<usize> = (1..self.endpoints.len())
-            .filter(|index| *index != current && self.endpoints[*index].slot.is_none())
+            .filter(|index| {
+                *index != current
+                    && self.endpoints[*index].slot.is_none()
+                    && scope.facets.admits_device(&self.endpoints[*index].id)
+            })
             .collect();
         let mut remote = Vec::new();
-        if !others.is_empty() || current == 0 {
+        // The group that heads the other devices belongs to them: it is painted
+        // only when one of them is kept, or when no device is chosen at all.
+        if !others.is_empty() || (current == 0 && chosen.is_none()) {
             remote.push(Entry::Header {
                 selector: "sessions-others-header".to_owned(),
                 text: if current == 0 {
@@ -74,7 +88,7 @@ impl HerdrWindow {
                 },
             });
         }
-        if others.is_empty() && current == 0 {
+        if others.is_empty() && current == 0 && chosen.is_none() {
             remote.push(Entry::Muted {
                 selector: "sessions-no-devices".to_owned(),
                 text: "No saved devices. Add one from the device picker.".to_owned(),
@@ -110,7 +124,9 @@ impl HerdrWindow {
                 entries.extend(section);
             }
         }
-        if narrowed && !entries.iter().any(|entry| entry.row().is_some()) {
+        // A search, or a device choice whose device is not in the catalog, can
+        // leave nothing at all: say so rather than an empty page.
+        if (narrowed || chosen.is_some()) && !entries.iter().any(|entry| entry.row().is_some()) {
             entries.push(Entry::Muted {
                 selector: "sessions-no-matches".to_owned(),
                 text: "No sessions match. Try fewer words or choose All.".to_owned(),
@@ -230,7 +246,6 @@ impl HerdrWindow {
             .filter(|(name, _, online, _, workspaces)| {
                 let project = self.session_project(&endpoint.id, name, workspaces);
                 scope.filter.admits(*online)
-                    && scope.facets.admits_device(&endpoint.id)
                     && scope.facets.admits_project(
                         self.session_project_id(&endpoint.id, name, workspaces)
                             .as_ref(),
@@ -336,7 +351,6 @@ impl HerdrWindow {
             .iter()
             .filter(|session| {
                 scope.filter.admits(session.state.running())
-                    && scope.facets.admits_device(&self.endpoints[0].id)
                     && scope.facets.admits_project(
                         self.session_project_id(
                             &self.endpoints[0].id,

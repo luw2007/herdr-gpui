@@ -12,6 +12,8 @@ use gpui::{Bounds, Entity, Modifiers, Pixels, TestAppContext, VisualTestContext,
 use herdr_client::{ConnectTarget, LocalSession, SessionState};
 
 mod anchor_layout;
+mod device_default;
+mod device_sections;
 // Adding a session needs SSH, which Windows does not offer.
 mod facet_limits;
 mod facets;
@@ -82,6 +84,23 @@ fn listed(view: &crate::HerdrWindow, device: &str, session: &str) -> bool {
 fn click(cx: &mut VisualTestContext, selector: &'static str) {
     let point = bounds(cx, selector).center();
     cx.simulate_click(point, Modifiers::default());
+}
+
+/// The sessions the manager paints, as `device:session`, in paint order.
+pub(super) fn names(view: &Entity<crate::HerdrWindow>, cx: &mut VisualTestContext) -> Vec<String> {
+    use crate::menu::sessions::{Entry, Row};
+    cx.update(|_, cx| {
+        view.read(cx)
+            .session_entries()
+            .iter()
+            .filter_map(Entry::row)
+            .filter_map(|row| match row {
+                Row::Local(name) => Some(format!("local:{name}")),
+                Row::Device { id, session } => Some(format!("{id}:{session}")),
+                Row::Add(_) => None,
+            })
+            .collect()
+    })
 }
 
 /// A window attached to `current`, holding `entries`, with its list open.

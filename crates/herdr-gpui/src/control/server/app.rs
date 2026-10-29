@@ -272,7 +272,9 @@ pub(super) fn ui(call: Call<UiOp>, cx: &mut App) -> Response {
 }
 
 /// The Device and Project filters a `sessions` request names, resolved the
-/// way `project` commands resolve their references.
+/// way `project` commands resolve their references. A request that names no
+/// device starts where the footer is, exactly as opening the manager by hand
+/// would; a named device wins over that.
 fn sessions_facets(
     view: &HerdrWindow,
     device: Option<String>,
@@ -281,12 +283,13 @@ fn sessions_facets(
     cx: &App,
 ) -> Result<crate::menu::SessionFacets, Response> {
     use crate::menu::{SessionFacets, SessionProject};
-    let device = device
-        .map(|name| {
+    let device = match device {
+        Some(name) => Some(
             super::projects::endpoint_named(view, &name)
-                .map(|index| view.endpoints[index].device_id().to_owned())
-        })
-        .transpose()?;
+                .map(|index| view.endpoints[index].device_id().to_owned())?,
+        ),
+        None => view.device_filter.clone(),
+    };
     let project = match (project, unassigned) {
         (Some(reference), _) => SessionProject::Is(
             crate::projects::Projects::read(cx, |registry| {

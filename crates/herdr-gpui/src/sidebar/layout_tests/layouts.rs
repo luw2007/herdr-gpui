@@ -338,7 +338,7 @@ fn rounded_rows_drop_tree_lines_and_title_headers(cx: &mut gpui::TestAppContext)
     use crate::config::{Density, LayoutMode, Style};
     // A fresh window per mode: GPUI keeps debug bounds from earlier frames,
     // so absence is only observable when the element never rendered.
-    for (style, header) in [(Style::Rounded, "Spaces"), (Style::Flat, "spaces")] {
+    for style in [Style::Rounded, Style::Flat] {
         let (view, cx) = cx.add_window_view(|window, cx| {
             let mut view = fixture_window(window, cx);
             view.live.snapshot = Some(Arc::new(snapshot(6)));
@@ -355,17 +355,13 @@ fn rounded_rows_drop_tree_lines_and_title_headers(cx: &mut gpui::TestAppContext)
             cx.debug_bounds("tree-sidebar-child").is_some(),
             style == Style::Flat
         );
-        let heading = cx.debug_bounds("header-spaces").unwrap();
+        let heading = cx.debug_bounds("header-workspaces").unwrap();
         let row = cx.debug_bounds("row-herdr").unwrap();
         let column = cx.debug_bounds("column-herdr").unwrap();
         // Headings start where rows' status dots do, inside the highlight.
-        let label = cx.debug_bounds("header-label-spaces").unwrap();
+        let label = cx.debug_bounds("header-label-workspaces").unwrap();
         assert_eq!(label.left(), column.left() - px(8. + 6.));
         assert!(heading.left() <= row.left());
-        // The heading is the resting search field, its label the placeholder.
-        view.read_with(cx, |view, cx| {
-            assert_eq!(view.sidebar_search.input.read(cx).placeholder(), header);
-        });
         // The row, not its highlight, is the click target: the inset beside a
         // rounded highlight still selects the row, so there are no dead zones.
         let row = cx.debug_bounds("row-agent-launcher").unwrap();

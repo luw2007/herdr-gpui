@@ -95,7 +95,7 @@ fn other_layouts_drop_the_search(cx: &mut gpui::TestAppContext) {
     });
     cx.update(|window, cx| full_draw(window, cx).clear(cx));
     assert!(view.read_with(cx, |view, _| view.devices_overview.tree_search.is_none()));
-    assert!(cx.debug_bounds("header-spaces").is_some());
+    assert!(cx.debug_bounds("header-workspaces").is_some());
     assert!(cx.debug_bounds("device-tree-search").is_none());
 }
 

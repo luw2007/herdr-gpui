@@ -567,7 +567,7 @@ impl HerdrWindow {
             .edit_containers(cx, |set| set.attach(shown, session).map(drop))
             .is_err()
         {
-            self.local_error = Some("This window lists too many sessions".into());
+            self.local_error = Some("This Space lists too many sessions".into());
         }
         self.containers_dirty = true;
     }

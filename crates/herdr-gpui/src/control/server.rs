@@ -219,6 +219,24 @@ pub(super) fn in_free_window(
                 "A dialog is open in the window; close it first",
             );
         }
+        if view.container_menu.is_some() {
+            return Response::error(
+                ErrorCode::WindowBusy,
+                "A Space menu is open in the window; close it first",
+            );
+        }
+        if view.space_overview.is_some() {
+            return Response::error(
+                ErrorCode::WindowBusy,
+                "The Space Overview is open in the window; close it first",
+            );
+        }
+        if crate::native_close::is_prompting(window, cx) {
+            return Response::error(
+                ErrorCode::WindowBusy,
+                "The window is asking whether to close; answer it first",
+            );
+        }
         act(view, window, cx)
     })
 }

@@ -63,6 +63,7 @@ pub(super) fn defaults(command: Command) -> &'static [&'static str] {
         CycleWindows => &["ctrl-shift-`"],
         // Tiling compositors such as Hyprland draw no close button.
         CloseWindow => &["ctrl-alt-w"],
+        SpaceOverview => &["ctrl-shift-e"],
         _ => &[],
     }
 }

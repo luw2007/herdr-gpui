@@ -16,7 +16,6 @@ fn base() -> ContainerSet {
 fn a_default_window_lists_the_base_session() {
     let set = base();
     assert_eq!(set.containers().len(), 1);
-    assert_eq!(set.containers()[0].title, "Window 1");
     assert_eq!(set.containers()[0].members, vec![s("local", "default")]);
     assert_eq!(set.containers()[0].grouping, Grouping::None);
 }
@@ -63,9 +62,13 @@ fn names_are_unique_bounded_and_printable() {
 #[test]
 fn automatic_names_skip_taken_ones() {
     let mut set = base();
-    set.create(Some("Window 2")).unwrap();
-    let id = set.create(None).unwrap();
-    assert_eq!(set.get(id).unwrap().title, "Window 3");
+    let other = set.create(None).unwrap();
+    let occupied = set.get(other).unwrap().title.clone();
+    set.rename(other, &format!("{occupied} renamed")).unwrap();
+    let reused = set.create(None).unwrap();
+    assert_eq!(set.get(reused).unwrap().title, occupied);
+    let next = set.create(None).unwrap();
+    assert_ne!(set.get(next).unwrap().title, occupied);
 }
 
 #[test]

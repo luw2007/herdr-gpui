@@ -902,7 +902,10 @@ impl HerdrWindow {
     /// it is never typed, pasted or dropped into. Every input path (keys, mouse,
     /// paste, clipboard reservations, drops, held input) asks this.
     pub(super) fn input_ready(&self) -> bool {
-        !self.container_is_empty() && self.pending_toast.is_none() && self.navigation_ready()
+        self.space_overview.is_none()
+            && !self.container_is_empty()
+            && self.pending_toast.is_none()
+            && self.navigation_ready()
     }
 
     // A coherent surface permits the deferred navigation attempt, not terminal

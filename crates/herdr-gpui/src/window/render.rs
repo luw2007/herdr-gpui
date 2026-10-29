@@ -727,8 +727,18 @@ impl Render for HerdrWindow {
         // user asked for, not chrome.
         let zen = self.zen_layout();
         let root = div()
-            .capture_key_down(cx.listener(Self::application_menu_shortcut))
-            .on_modifiers_changed(cx.listener(Self::double_shift_modifiers))
+            .capture_key_down(cx.listener(|this, event, window, cx| {
+                if this.space_overview.is_none() {
+                    this.application_menu_shortcut(event, window, cx);
+                }
+            }))
+            .on_modifiers_changed(cx.listener(|this, event, window, cx| {
+                if this.space_overview.is_none() {
+                    this.double_shift_modifiers(event, window, cx);
+                } else {
+                    this.shift_taps.cancel();
+                }
+            }))
             .capture_any_mouse_down(cx.listener(|this, _, _, _| this.shift_taps.cancel()))
             .child({
                 let entity = cx.weak_entity();
@@ -888,6 +898,7 @@ impl Render for HerdrWindow {
             .children(self.render_toasts(window, cx))
             .children(self.render_file_transfer(window, cx))
             .children(self.render_container_menu(window, cx))
+            .children(self.render_space_overview(window, cx))
             .when(self.menu.page.is_some(), |root| {
                 root.child(self.render_menu(window, cx))
             });

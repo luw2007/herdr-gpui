@@ -141,6 +141,9 @@ impl EntityInputHandler for HerdrWindow {
         cx: &mut Context<Self>,
     ) {
         self.shift_taps.cancel();
+        if self.space_overview.is_some() {
+            return;
+        }
         if self.menu.page.is_some() {
             if let Some(input) = self.menu.input.as_mut() {
                 input.replace(range, text, false, None);

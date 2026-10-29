@@ -1,6 +1,5 @@
-//! A refused New Window must say why, from the menu command and the strip, and
-//! the strip must keep its buttons reachable however many Windows there are
-//! or however long their titles.
+//! A refused New Space reports its registry limit through the command and strip.
+//! Fixed strip controls remain reachable with many Spaces and long titles.
 use super::*;
 use crate::containers::MAX_CONTAINERS;
 use gpui::{Bounds, Modifiers, Pixels, VisualTestContext, px, size};
@@ -22,7 +21,7 @@ fn failure_toast(view: &gpui::Entity<HerdrWindow>, cx: &mut VisualTestContext) -
             .toasts
             .entries
             .iter()
-            .find(|(_, notice)| notice.title == "New Window failed")
+            .find(|(_, notice)| notice.is_local_feedback())
             .map(|(id, _)| *id)
     })
 }
@@ -140,7 +139,7 @@ fn a_later_success_clears_the_old_refusal(cx: &mut gpui::TestAppContext) {
             .toasts
             .entries
             .iter()
-            .filter(|(_, notice)| notice.title == "New Window failed")
+            .filter(|(_, notice)| notice.is_local_feedback())
             .count()
     });
     assert_eq!(count, 1, "repeated refusals replace one another");

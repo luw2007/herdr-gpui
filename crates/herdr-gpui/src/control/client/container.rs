@@ -1,4 +1,4 @@
-//! `container`.
+//! `space`.
 use super::{Context, Output, unexpected};
 use crate::{
     cli::control::ContainerCommand,
@@ -11,6 +11,11 @@ use std::fmt::Write as _;
 
 pub(super) fn container(command: ContainerCommand, context: &Context) -> crate::Result<Output> {
     let op = match command {
+        // The overview is a window action like any other command, so it goes
+        // through the same request and busy check as `run space_overview`.
+        ContainerCommand::Overview => {
+            return super::app::run_command("space_overview", context);
+        }
         ContainerCommand::List => ContainerOp::List,
         ContainerCommand::New { title } => ContainerOp::New { title },
         ContainerCommand::Focus { window } => ContainerOp::Focus { window },

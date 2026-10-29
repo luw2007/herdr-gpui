@@ -45,7 +45,7 @@ fn session(slot: Slot) -> Option<SessionRef> {
 
 /// `title`, or `title 2`, `title 3`, ... when a Window already has the name.
 pub(super) fn unique(title: &str, taken: &HashSet<String>) -> String {
-    let base = clean_title(title).unwrap_or_else(|_| "Window".to_owned());
+    let base = clean_title(title).unwrap_or_else(|_| "Space".to_owned());
     if !taken.contains(&base) {
         return base;
     }

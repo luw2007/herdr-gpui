@@ -24,6 +24,12 @@ struct Prompted(HashSet<AnyWindowHandle>);
 
 impl Global for Prompted {}
 
+/// Whether a native close confirmation already owns this window's input.
+pub(crate) fn is_prompting(window: &Window, cx: &App) -> bool {
+    cx.try_global::<Prompted>()
+        .is_some_and(|prompted| prompted.0.contains(&window.window_handle()))
+}
+
 /// Makes the platform's own close path ask first: its close button, window
 /// menu, and shortcuts. A client-drawn title bar calls [`request_close`].
 pub(crate) fn install(window: &mut Window, cx: &mut App) {

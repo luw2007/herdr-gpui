@@ -2,10 +2,7 @@
 //! filter and the search text, and how the list, page and selection restart
 //! when they change.
 use super::*;
-use crate::{
-    menu::sessions::{Entry, Row},
-    projects::Projects,
-};
+use crate::{menu::sessions::Row, projects::Projects};
 use herdr_client::{ProjectId, RemoteSession, SessionWorkspace};
 
 fn saved(name: &str, state: SessionState, path: Option<&str>) -> LocalSession {
@@ -20,21 +17,6 @@ fn saved(name: &str, state: SessionState, path: Option<&str>) -> LocalSession {
             .collect(),
         ..session(name, state)
     }
-}
-
-fn names(view: &Entity<crate::HerdrWindow>, cx: &mut VisualTestContext) -> Vec<String> {
-    cx.update(|_, cx| {
-        view.read(cx)
-            .session_entries()
-            .iter()
-            .filter_map(Entry::row)
-            .filter_map(|row| match row {
-                Row::Local(name) => Some(format!("local:{name}")),
-                Row::Device { id, session } => Some(format!("{id}:{session}")),
-                Row::Add(_) => None,
-            })
-            .collect()
-    })
 }
 
 fn create(cx: &mut VisualTestContext, name: &str) -> ProjectId {

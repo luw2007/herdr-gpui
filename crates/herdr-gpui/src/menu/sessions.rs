@@ -19,6 +19,8 @@ pub(super) use catalog::Filter;
 pub(crate) use catalog::{Facets, ProjectPick};
 pub(super) use facets::Facet;
 pub(super) use management::Edit;
+#[cfg(test)]
+pub(in crate::menu) use management::Target as AddTarget;
 pub(super) use projects::ProjectEdit;
 pub(super) use view::View;
 

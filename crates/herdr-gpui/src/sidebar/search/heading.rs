@@ -24,7 +24,7 @@ pub(in crate::sidebar) enum Heading {
 impl Heading {
     fn label(self) -> &'static str {
         match self {
-            Self::Spaces => "spaces",
+            Self::Spaces => "workspaces",
             Self::DeviceTree => "devices",
         }
     }

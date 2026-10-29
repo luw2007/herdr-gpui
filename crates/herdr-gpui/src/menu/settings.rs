@@ -366,6 +366,7 @@ impl HerdrWindow {
                 | Command::ToggleStatusBar
                 | Command::ToggleZenMode
                 | Command::DevicesOverview
+                | Command::SpaceOverview
                 | Command::IncreaseFontSize
                 | Command::DecreaseFontSize
                 | Command::ResetFontSize

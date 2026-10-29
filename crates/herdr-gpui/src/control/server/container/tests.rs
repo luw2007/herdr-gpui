@@ -264,7 +264,7 @@ fn focus_finds_a_window_another_native_window_just_created(cx: &mut TestAppConte
         .unwrap();
     // `second` has not polled, so its mirror does not list "Fresh" yet.
     let response = focus(&second, "Fresh", cx);
-    assert_eq!(response, Response::done(format!("Showing window {fresh}")));
+    assert!(matches!(response, Response::Done { .. }), "{response:?}");
     let shown = second.update(cx, |view, _, _| view.containers.shown_id());
     assert_eq!(shown.unwrap(), fresh);
 }

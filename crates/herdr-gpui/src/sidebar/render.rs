@@ -195,7 +195,7 @@ impl HerdrWindow {
                             .and_then(|heading| self.search_heading(heading, look, window, cx))
                             .unwrap_or_else(|| {
                                 header(
-                                    if devices { "devices" } else { "spaces" },
+                                    if devices { "devices" } else { "workspaces" },
                                     font,
                                     theme,
                                     look,

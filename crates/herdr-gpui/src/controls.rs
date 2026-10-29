@@ -8,7 +8,7 @@ pub(crate) use shortcuts::platform_default;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Deserialize)]
 pub enum Command {
     NewWindow,
-    /// A new logical Window inside this native window.
+    /// A new Space inside this native window.
     NewContainer,
     NextContainer,
     PreviousContainer,
@@ -49,6 +49,8 @@ pub enum Command {
     /// Hides the window's chrome and every group but the one in use.
     ToggleZenMode,
     DevicesOverview,
+    /// Every Space, its native windows, and its sessions, in one view.
+    SpaceOverview,
     IncreaseFontSize,
     DecreaseFontSize,
     ResetFontSize,
@@ -136,18 +138,18 @@ pub const COMMANDS: &[CommandInfo] = &[
     },
     CommandInfo {
         command: Command::NewContainer,
-        name: "new_container",
-        label: "New Logical Window",
+        name: "new_space",
+        label: "New Space",
     },
     CommandInfo {
         command: Command::NextContainer,
-        name: "next_container",
-        label: "Next Logical Window",
+        name: "next_space",
+        label: "Next Space",
     },
     CommandInfo {
         command: Command::PreviousContainer,
-        name: "previous_container",
-        label: "Previous Logical Window",
+        name: "previous_space",
+        label: "Previous Space",
     },
     CommandInfo {
         command: Command::Workspace,
@@ -555,6 +557,11 @@ pub const COMMANDS: &[CommandInfo] = &[
         label: "Devices Overview",
     },
     CommandInfo {
+        command: Command::SpaceOverview,
+        name: "space_overview",
+        label: "Space Overview",
+    },
+    CommandInfo {
         command: Command::IncreaseFontSize,
         name: "increase_font_size",
         label: "Increase Font Size",
@@ -838,6 +845,7 @@ pub fn request(command: Command, snapshot: &ClientShellSnapshot) -> Option<(Meth
         | Command::ToggleStatusBar
         | Command::ToggleZenMode
         | Command::DevicesOverview
+        | Command::SpaceOverview
         | Command::IncreaseFontSize
         | Command::DecreaseFontSize
         | Command::ResetFontSize

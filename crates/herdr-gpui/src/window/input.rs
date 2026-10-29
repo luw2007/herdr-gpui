@@ -156,7 +156,8 @@ impl HerdrWindow {
     }
 
     pub(crate) fn terminal_link_at(&self, position: Point<Pixels>) -> Option<String> {
-        if self.menu.page.is_some()
+        if self.space_overview.is_some()
+            || self.menu.page.is_some()
             || !self.live.surface_ready()
             || !self.bounds.contains(&position)
         {
@@ -244,7 +245,7 @@ impl HerdrWindow {
     pub(crate) fn paste(&mut self, cx: &mut Context<Self>) {
         // Edit > Paste reaches here without passing `key_down`. An empty
         // Window is refused by `input_ready` on every path below.
-        if self.copy_mode_active() {
+        if self.space_overview.is_some() || self.copy_mode_active() {
             return;
         }
         // GPUI has no text-only Linux clipboard API. Preserve its native
@@ -263,6 +264,10 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.space_overview.is_some() {
+            self.overview_key(event, window, cx);
+            return;
+        }
         // An empty logical Window shows no terminal, so nothing is typed into
         // the session still connected behind it.
         if self.container_is_empty() && self.menu.page.is_none() {
@@ -391,6 +396,11 @@ impl HerdrWindow {
     /// terminal to report all keys. Text stays with the input handler, so
     /// only keys sent as key events are released.
     pub(crate) fn key_up(&mut self, event: &KeyUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.space_overview.is_some() {
+            self.held_keys.forget(&event.keystroke.key);
+            cx.stop_propagation();
+            return;
+        }
         // Held under the name `key_down` gave it.
         let named = super::function_keys::named(&event.keystroke, self.key_press);
         let key = &named.as_ref().unwrap_or(&event.keystroke).key;

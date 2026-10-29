@@ -6,12 +6,14 @@ mod project_manage;
 
 const COMMON: &str = "\
 Every command accepts --json, printing one JSON document, and --window ID,
-acting in that window (IDs come from `window list`). By default a command
-acts in the window showing the caller's workspace (HERDR_WORKSPACE_ID), and
-exits 5 when no window shows it; outside Herdr, in the frontmost window.
+acting in that native window (IDs come from `window list`). By default a
+command acts in the window showing the caller's workspace
+(HERDR_WORKSPACE_ID), and exits 5 when no window shows it; outside Herdr, in
+the frontmost window.
 Exit status: 0 done, 1 refused, 2 invalid arguments, 3 Herdr UI not running,
-4 nothing yet (no notes, no event), 5 not found, 6 busy (a dialog is open),
-7 timed out, 8 unsupported on this platform or by this app version.";
+4 nothing yet (no notes, no event), 5 not found, 6 busy (a dialog, Space
+menu, overview, or close prompt owns the window), 7 timed out,
+8 unsupported on this platform or by this app version.";
 
 const BROWSER: &str = "\
 herdr-gpui browser open URL|FILE [--workspace ID] [--no-focus] [--beside|--tab]
@@ -58,8 +60,8 @@ fn family(name: &str) -> &'static str {
         "window" => {
             "herdr-gpui window [list]\n    The app's windows, with IDs for --window.\nherdr-gpui window new [--session NAME]\n    Open another window: of the caller's own Herdr session, of a named\n    local session, or outside Herdr of the frontmost window's host.\nherdr-gpui window focus ID\nherdr-gpui window fullscreen [on|off|toggle]\nherdr-gpui window size [WIDTHxHEIGHT]\n    Print the window's size, or resize it. Windows cannot be moved.\nherdr-gpui window detach|reconnect\n    Detach from, or reconnect to, the window's selected host."
         }
-        "container" => {
-            "herdr-gpui container [list]\n    The app's Windows (global, named sets of sessions) with the sessions\n    each lists; `*` marks the one this window shows. WINDOW below is an ID\n    from this list or an exact name.\nherdr-gpui container new [--title TITLE]\n    Add an empty Window and show it here.\nherdr-gpui container focus WINDOW\n    Show a Window in this native window.\nherdr-gpui container rename WINDOW TITLE\n    Rename a Window (names are unique, 1-64 characters).\nherdr-gpui container close WINDOW\n    Ask to close an empty Window for every native window: the app opens its\n    close confirmation there and this command answers `close_pending`, so\n    nothing is closed yet. Confirming closes only that Window; the last one\n    is replaced by an empty default. A Window that lists sessions is\n    refused: detach them first.\nherdr-gpui container move WINDOW POSITION\n    Move a Window to a 1-based place in the list.\nherdr-gpui container move-session SESSION POSITION [--device ID] [--in WINDOW]\n    Move a session to a 1-based place in a Window's list.\nherdr-gpui container group WINDOW none|project|status|mr\n    Record how the Window's sessions are to be grouped (stored only).\nherdr-gpui container attach SESSION [--device ID] [--in WINDOW]\n    Attach a session of the shown device (or of --device, an ID from\n    `host list`) to the shown Window (or --in WINDOW) and show it.\nherdr-gpui container detach SESSION [--device ID] [--in WINDOW]\n    Remove a session from a Window's list. Viewing only: nothing is\n    created, stopped, or deleted; use `herdr` for sessions."
+        "space" => {
+            "herdr-gpui space [list]\n    The app's Spaces (global, named sets of sessions) with the sessions\n    each lists; `*` marks the one this native window shows. SPACE below is\n    an ID from this list or an exact name; --window instead names a native\n    window (IDs come from `window list`).\nherdr-gpui space overview\n    Open Space Overview in the targeted native window: each Space and\n    its sessions with connection status. Escape closes it; it\n    refuses while a dialog, Space menu, or close prompt owns the window,\n    and other commands are refused while it is open.\nherdr-gpui space new [--title TITLE]\n    Add an empty Space and show it here.\nherdr-gpui space focus SPACE\n    Show a Space in this native window.\nherdr-gpui space rename SPACE TITLE\n    Rename a Space (names are unique, 1-64 characters).\nherdr-gpui space close SPACE\n    Ask to close an empty Space for every native window: the app opens its\n    close confirmation there and this command answers `close_pending`, so\n    nothing is closed yet. Confirming closes only that Space; the last one\n    is replaced by an empty default. A Space that lists sessions is\n    refused: detach them first.\nherdr-gpui space move SPACE POSITION\n    Move a Space to a 1-based place in the list.\nherdr-gpui space move-session SESSION POSITION [--device ID] [--in SPACE]\n    Move a session to a 1-based place in a Space's list.\nherdr-gpui space group SPACE none|project|status|mr\n    Record how the Space's sessions are to be grouped (stored only).\nherdr-gpui space attach SESSION [--device ID] [--in SPACE]\n    Attach a session of the shown device (or of --device, an ID from\n    `host list`) to the shown Space (or --in SPACE) and show it.\nherdr-gpui space detach SESSION [--device ID] [--in SPACE]\n    Remove a session from a Space's list. Viewing only: nothing is\n    created, stopped, or deleted; use `herdr` for sessions."
         }
         "ui" => {
             "herdr-gpui ui sidebar [on|off|toggle]\nherdr-gpui ui statusbar [on|off|toggle]\nherdr-gpui ui font-size +|-|reset|POINTS\n    For this window and session; settings are changed with `config`."
@@ -149,7 +151,7 @@ fn family(name: &str) -> &'static str {
         }
         "commands" => "herdr-gpui commands\n    The commands `run` accepts, with their shortcuts.",
         "sessions" => {
-            "herdr-gpui sessions [QUERY...] [--device DEVICE] [--project PROJECT | --no-project]\n    Open the Sessions manager, optionally filtering the app's session\n    project index by project, branch, or path. --device keeps one device's\n    sessions (id or label), --project one project's (id or name), and\n    --no-project those in no project; they combine with QUERY. The user chooses and\n    confirms actions in the manager; this does not list, stop, or delete\n    daemon sessions. QUERY is printable and at most 4096 bytes."
+            "herdr-gpui sessions [QUERY...] [--device DEVICE] [--project PROJECT | --no-project]\n    Open the Sessions manager, optionally filtering the app's session\n    project index by project, branch, or path. --device keeps one device's\n    sessions (id or label), --project one project's (id or name), and\n    --no-project those in no project; they combine with QUERY. Without\n    --device it starts on the footer's device; an explicit one wins. The\n    user chooses and confirms actions in the manager; this does not list,\n    stop, or delete daemon sessions. QUERY is printable and at most 4096\n    bytes."
         }
         "project" => {
             concat!(

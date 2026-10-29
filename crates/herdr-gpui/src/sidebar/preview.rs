@@ -246,7 +246,7 @@ impl Preview {
                     .flex_none()
                     .flex()
                     .flex_col()
-                    .child(heading("spaces"))
+                    .child(heading("workspaces"))
                     .child(spaces),
             )
             .child(heading("agents"))

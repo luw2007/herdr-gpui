@@ -203,6 +203,12 @@ pub(crate) fn menus(layout: Layout) -> Vec<Menu> {
                         command: Command::DevicesOverview,
                     },
                 ),
+                MenuItem::action(
+                    "Space Overview",
+                    RunCommand {
+                        command: Command::SpaceOverview,
+                    },
+                ),
                 MenuItem::separator(),
                 MenuItem::action(
                     "Toggle Full Screen",
@@ -351,7 +357,7 @@ pub(crate) fn menus(layout: Layout) -> Vec<Menu> {
                     },
                 ),
                 MenuItem::action(
-                    "New Logical Window",
+                    "New Space",
                     RunCommand {
                         command: Command::NewContainer,
                     },

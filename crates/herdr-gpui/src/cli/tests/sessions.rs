@@ -53,7 +53,7 @@ fn sessions_rejects_unknown_flags_invalid_targets_and_unbounded_queries() {
 }
 
 #[test]
-fn container_commands_parse_with_json_and_native_window_targeting() {
+fn space_commands_parse_with_json_and_native_window_targeting() {
     use crate::cli::control::ContainerCommand;
     let mode = |args: &[&str]| LaunchOptions::parse(args.iter().copied()).map(|o| o.mode);
     let control = |command, json, window| {
@@ -64,11 +64,19 @@ fn container_commands_parse_with_json_and_native_window_targeting() {
         })
     };
     assert_eq!(
-        mode(&["container"]).unwrap(),
+        mode(&["space"]).unwrap(),
         control(ContainerCommand::List, false, None)
     );
     assert_eq!(
-        mode(&["container", "new", "--title", "Build", "--json"]).unwrap(),
+        mode(&["space", "overview", "--json", "--window", "9"]).unwrap(),
+        control(ContainerCommand::Overview, true, Some(9))
+    );
+    assert_eq!(
+        mode(&["--json", "space", "overview"]).unwrap(),
+        control(ContainerCommand::Overview, true, None)
+    );
+    assert_eq!(
+        mode(&["space", "new", "--title", "Build", "--json"]).unwrap(),
         control(
             ContainerCommand::New {
                 title: Some("Build".into())
@@ -78,7 +86,7 @@ fn container_commands_parse_with_json_and_native_window_targeting() {
         )
     );
     assert_eq!(
-        mode(&["container", "focus", "Build", "--window", "9"]).unwrap(),
+        mode(&["space", "focus", "Build", "--window", "9"]).unwrap(),
         control(
             ContainerCommand::Focus {
                 window: "Build".into()
@@ -88,7 +96,7 @@ fn container_commands_parse_with_json_and_native_window_targeting() {
         )
     );
     assert_eq!(
-        mode(&["container", "attach", "work", "--device", "ssh:box"]).unwrap(),
+        mode(&["space", "attach", "work", "--device", "ssh:box"]).unwrap(),
         control(
             ContainerCommand::Attach {
                 session: "work".into(),
@@ -99,13 +107,44 @@ fn container_commands_parse_with_json_and_native_window_targeting() {
             None
         )
     );
+    assert_eq!(
+        mode(&["space", "detach", "work", "--in", "Build"]).unwrap(),
+        control(
+            ContainerCommand::Detach {
+                session: "work".into(),
+                device: None,
+                window: Some("Build".into())
+            },
+            false,
+            None
+        )
+    );
+    assert_eq!(
+        mode(&["space", "group", "Build", "mr"]).unwrap(),
+        control(
+            ContainerCommand::Group {
+                window: "Build".into(),
+                by: "mr".into()
+            },
+            false,
+            None
+        )
+    );
     for bad in [
-        vec!["container", "focus"],
-        vec!["container", "attach"],
-        vec!["container", "stop"],
-        vec!["container", "new", "--bogus"],
+        vec!["space", "focus"],
+        vec!["space", "attach"],
+        vec!["space", "stop"],
+        vec!["space", "new", "--bogus"],
     ] {
         assert!(mode(&bad).is_err(), "{bad:?}");
+    }
+    // The old external name is gone, not an alias.
+    for old in [vec!["container"], vec!["container", "list"]] {
+        assert_eq!(
+            mode(&old).unwrap_err(),
+            CliError::UnknownOption("container".into()),
+            "{old:?}"
+        );
     }
 }
 

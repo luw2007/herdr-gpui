@@ -34,21 +34,21 @@ type Result<T, E = ContainerError> = std::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ContainerError {
-    #[error("Window name must be 1-64 printable characters")]
+    #[error("Space name must be 1-64 printable characters")]
     InvalidTitle,
-    #[error("A window named {0:?} already exists")]
+    #[error("A Space named {0:?} already exists")]
     DuplicateTitle(String),
-    #[error("Invalid saved windows")]
+    #[error("Invalid saved Spaces")]
     InvalidState,
-    #[error("No such window")]
+    #[error("No such Space")]
     NoSuchContainer,
-    #[error("The window still lists sessions. Detach its sessions first")]
+    #[error("The Space still lists sessions. Detach its sessions first")]
     NotEmpty,
-    #[error("The session is not in that window")]
+    #[error("The session is not in that Space")]
     NoSuchMember,
-    #[error("At most {0} windows are allowed")]
+    #[error("At most {0} Spaces are allowed")]
     TooManyContainers(usize),
-    #[error("At most {0} sessions fit one window")]
+    #[error("At most {0} sessions fit one Space")]
     TooManySlots(usize),
 }
 
@@ -205,10 +205,10 @@ impl ContainerSet {
         }
     }
 
-    /// The first unused `Window N`.
+    /// The first unused `Space N`; existing saved titles are never rewritten.
     fn fresh_title(&self) -> String {
         (1..)
-            .map(|n| format!("Window {n}"))
+            .map(|n| format!("Space {n}"))
             .find(|title| !self.containers.iter().any(|c| &c.title == title))
             .unwrap_or_default()
     }

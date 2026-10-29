@@ -53,13 +53,13 @@ two projects or devices share it); `--json` then reports the error code
 
 ## Commands
 
-### App and windows
+### App, windows and Spaces
 
-`window` commands act on native OS windows. `container` commands act on the
-app's Windows: global, named sets of sessions shared by every native window.
-`--window ID` names the native window whose view a command uses (which Window
+`window` commands act on native OS windows. `space` commands act on
+Spaces: global, named sets of sessions shared by every native window.
+`--window ID` names the native window whose view a command uses (which Space
 `focus` changes, which one `list` marks with `*` and a bare `attach` targets).
-A WINDOW argument is a Window ID from `container list` or its exact name.
+A SPACE argument is a Space ID from `space list` or its exact name.
 
 | Command | What it does |
 | --- | --- |
@@ -71,29 +71,37 @@ A WINDOW argument is a Window ID from `container list` or its exact name.
 | `window fullscreen [on\|off\|toggle]` | |
 | `window size [WIDTHxHEIGHT]` | Print or set the window's size; windows cannot be moved |
 | `window detach\|reconnect` | Detach from, or reconnect to, the selected host |
-| `container [list]` | The Windows with IDs, names, grouping, their sessions and connection status; `*` marks the one this native window shows. The answer is bounded: a Window whose sessions do not fit says how many it left out (`sessions_total` in `--json`) |
-| `container new [--title TITLE]` | Add an empty Window and show it here; no daemon is started |
-| `container focus WINDOW` | Show a Window in this native window only |
-| `container rename WINDOW TITLE` | Rename a Window; names are unique, 1-64 printable characters |
-| `container close WINDOW` | Ask to close an empty Window for every native window: the app opens its close confirmation in the targeted window and the command answers `close_pending`, so nothing is closed yet. Confirming closes only that Window, and the last Window is replaced by an empty default. A Window that lists sessions is refused (exit 1), so detach them first |
-| `container move WINDOW POSITION` | Move a Window to a 1-based place in the list |
-| `container group WINDOW none\|project\|status\|mr` | Record how the Window's sessions are grouped; the sidebar groups by `project`, `status`, or `mr` (pull request state, derived from each session's saved workspaces; github.com on this machine and SSH devices only, others show Unsupported). The Window's right-click menu offers the same four values. While the shown Window groups by `mr`, its member sessions in the Sessions list carry a compact badge (bucket, PR number, mixed/stale); nothing is shown otherwise |
-| `container attach SESSION [--device ID] [--in WINDOW]` | Attach a session of the shown device (or of `--device`, an ID from `host list`) to the shown Window (or `--in WINDOW`). View only: it creates, stops, and deletes nothing, so create sessions with `herdr` or the Sessions manager |
-| `container detach SESSION [--device ID] [--in WINDOW]` | Remove a session from a Window's list; the session keeps running |
-| `container move-session SESSION POSITION [--device ID] [--in WINDOW]` | Move a session to a 1-based place in a Window's list |
+| `space [list]` | Spaces with IDs, names, grouping, their sessions and connection status; `*` marks the one this native window shows. The answer is bounded: a Space whose sessions do not fit says how many it left out (`sessions_total` in `--json`) |
+| `space overview` | Open Space Overview in the targeted native window; refuses while another dialog owns input |
+| `space new [--title TITLE]` | Add an empty Space and show it here; no daemon is started |
+| `space focus SPACE` | Show a Space in this native window only |
+| `space rename SPACE TITLE` | Rename a Space; names are unique, 1-64 printable characters |
+| `space close SPACE` | Ask to close an empty Space for every native window: the app opens its close confirmation in the targeted window and the command answers `close_pending`, so nothing is closed yet. Confirming closes only that Space, and the last Space is replaced by an empty default. A Space that lists sessions is refused (exit 1), so detach them first |
+| `space move SPACE POSITION` | Move a Space to a 1-based place in the list |
+| `space group SPACE none\|project\|status\|mr` | Record how the Space's sessions are grouped; the sidebar groups by `project`, `status`, or `mr` (pull request state, derived from each session's saved workspaces; github.com on this machine and SSH devices only, others show Unsupported). The Space's right-click menu offers the same four values. While the shown Space groups by `mr`, its member sessions in the Sessions list carry a compact badge (bucket, PR number, mixed/stale); nothing is shown otherwise |
+| `space attach SESSION [--device ID] [--in SPACE]` | Attach a session of the shown device (or of `--device`, an ID from `host list`) to the shown Space (or `--in SPACE`). View only: it creates, stops, and deletes nothing, so create sessions with `herdr` or the Sessions manager |
+| `space detach SESSION [--device ID] [--in SPACE]` | Remove a session from a Space's list; the session keeps running |
+| `space move-session SESSION POSITION [--device ID] [--in SPACE]` | Move a session to a 1-based place in a Space's list |
 | `ui sidebar\|statusbar [on\|off\|toggle]` | For this window and session |
 | `ui font-size +\|-\|reset\|POINTS` | The terminal font size for this session |
 | `run COMMAND` | Any app command by its `[keybindings]` name, as the palette runs it |
 | `commands` | The names `run` accepts (no app needed) |
 | `sessions [QUERY...] [--device DEVICE] [--project PROJECT \| --no-project]` | Open the Sessions manager with an optional saved-project-context search and Device / Project filters |
 
-Window management in the app: right-click a Window tab in the strip, or use the
+Space management in the app: right-click a Space tab in the strip, or use the
 `…` on the selected tab, to rename it, close it, or group it by none, project,
-status or mr. Closing asks first: **Cancel** keeps the Window and only
-**Close Window** closes it. A Window that lists sessions is not offered for
+status or mr. Closing asks first: **Cancel** keeps the Space and only
+**Close Space** closes it. A Space that lists sessions is not offered for
 close at all (the menu says to detach them first), and the tab's × follows the
-same rules. These use the same operations as `container rename`, `close` and
-`group`, and `container close` cannot skip the confirmation.
+same rules. These use the same operations as `space rename`, `close` and
+`group`, and `space close` cannot skip the confirmation.
+
+The top-right grid button opens **Space Overview**. Its configurable command
+is `space_overview` (`Cmd-Shift-E` on macOS, `Ctrl-Shift-E` on Linux).
+The Space creation/stepping keybinding names are `new_space`, `next_space`,
+and `previous_space`; replace the former `*_container` names in custom
+`[keybindings]`. The CLI family is now `space`, not `container`; native
+`window` commands and saved Space IDs, names and files are unchanged.
 
 `sessions` opens the same manager as the app's Sessions command, in the
 targeted window. Its query matches project, path and labels from saved
@@ -105,8 +113,11 @@ Queries may contain spaces but must be printable and at most 4096 UTF-8 bytes.
 `--device` takes a device ID or exact label (as `project bind --device` does),
 `--project` a project ID or exact name, and `--no-project` keeps only sessions
 that resolve to no project; the three combine with the query and the manager's
-All/Running/Stopped filter. An unknown device or project exits 5 (not found),
-an ambiguous one exits 1, both before anything opens. In the app, right-click a Window tab to
+All/Running/Stopped filter. Without `--device` the manager starts on the device
+the window's footer shows (All Devices when it shows that), exactly as opening
+it from the app does; an explicit `--device` wins over that. An unknown device
+or project exits 5 (not found),
+an ambiguous one exits 1, both before anything opens. In the app, right-click a Space tab to
 rename it, close it (asking first, and only when it lists no sessions) or
 choose its grouping.
 `windows.json` is version 2 only while a session is stopped (`paused`); a file

@@ -206,7 +206,11 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.menu.page.is_some() {
+        if command == Command::SpaceOverview {
+            self.toggle_space_overview(window, cx);
+            return;
+        }
+        if self.space_overview.is_some() || self.menu.page.is_some() {
             return;
         }
         #[cfg(feature = "integration-test")]

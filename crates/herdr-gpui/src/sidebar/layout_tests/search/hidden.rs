@@ -15,7 +15,7 @@ fn turning_the_search_off_hides_the_field_and_its_results(cx: &mut gpui::TestApp
     // The list comes back whole, starting right under the heading.
     assert!(cx.debug_bounds("sidebar-search").is_none());
     assert!(cx.debug_bounds("sidebar-search-results").is_none());
-    let heading = cx.debug_bounds("header-spaces").unwrap();
+    let heading = cx.debug_bounds("header-workspaces").unwrap();
     let list = cx.debug_bounds("spaces-scroll").unwrap();
     assert_eq!(list.top(), heading.bottom());
 

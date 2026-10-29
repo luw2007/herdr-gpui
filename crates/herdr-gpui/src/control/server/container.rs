@@ -1,4 +1,4 @@
-//! `container`: the app's global Windows, as seen from one native window.
+//! `space`: the app's global Spaces, as seen from one native window.
 use super::{in_free_window, in_window, work::flows::bring_forward};
 use crate::{
     HerdrWindow,
@@ -121,7 +121,7 @@ fn find(set: &ContainerSet, reference: &str) -> Result<ContainerId, Response> {
     by_id.or_else(|| set.by_name(reference)).ok_or_else(|| {
         Response::error(
             ErrorCode::NotFound,
-            format!("No window {reference}; `container list` shows them"),
+            format!("No space {reference}; `space list` shows them"),
         )
     })
 }
@@ -173,7 +173,7 @@ pub(super) fn container(call: Call<ContainerOp>, cx: &mut App) -> Response {
                 );
             }
             match view.new_container(title.as_deref(), cx) {
-                Ok(id) => Response::done(format!("Created window {id}")),
+                Ok(id) => Response::done(format!("Created space {id}")),
                 Err(error) => refused(&error),
             }
         }),
@@ -184,16 +184,16 @@ pub(super) fn container(call: Call<ContainerOp>, cx: &mut App) -> Response {
                 Err(response) => return response,
             };
             if view.switch_container(id, cx) {
-                Response::done(format!("Showing window {id}"))
+                Response::done(format!("Showing space {id}"))
             } else {
-                Response::error(ErrorCode::NotFound, format!("No window {window}"))
+                Response::error(ErrorCode::NotFound, format!("No space {window}"))
             }
         }),
         ContainerOp::Rename { window, title } => in_free_window(caller, cx, |view, _, cx| {
             view.sync_containers(cx);
             match find(view.containers.set(), &window) {
                 Ok(id) => match view.rename_container(id, &title, cx) {
-                    Ok(()) => Response::done(format!("Renamed window {id}")),
+                    Ok(()) => Response::done(format!("Renamed space {id}")),
                     Err(error) => refused(&error),
                 },
                 Err(response) => response,
@@ -206,22 +206,14 @@ pub(super) fn container(call: Call<ContainerOp>, cx: &mut App) -> Response {
                     Ok(id) => id,
                     Err(response) => return response,
                 };
-                // The same rule the tab menu and the strip's × follow: a Window
+                // The same rule the tab menu and the strip's × follow: a Space
                 // that lists sessions is refused outright.
                 let Some(container) = view.containers.set().get(id) else {
-                    return Response::error(ErrorCode::NotFound, format!("No window {reference}"));
+                    return Response::error(ErrorCode::NotFound, format!("No space {reference}"));
                 };
                 let title = container.title.clone();
                 if !container.members.is_empty() {
                     return refused(&ContainerError::NotEmpty);
-                }
-                // A menu already open in the window is the user's: do not replace
-                // it with a question they did not ask for.
-                if view.container_menu.is_some() {
-                    return Response::error(
-                        ErrorCode::WindowBusy,
-                        "A Window menu is open in the window; close it first",
-                    );
                 }
                 let anchor = {
                     let viewport = window.viewport_size();
@@ -254,7 +246,7 @@ pub(super) fn container(call: Call<ContainerOp>, cx: &mut App) -> Response {
             match view.edit_containers(cx, |set| set.move_container(id, to)) {
                 Ok(()) => {
                     cx.notify();
-                    Response::done(format!("Moved window {id} to position {position}"))
+                    Response::done(format!("Moved space {id} to position {position}"))
                 }
                 Err(error) => refused(&error),
             }
@@ -274,7 +266,7 @@ pub(super) fn container(call: Call<ContainerOp>, cx: &mut App) -> Response {
             match view.edit_containers(cx, |set| set.set_grouping(id, grouping)) {
                 Ok(()) => {
                     cx.notify();
-                    Response::done(format!("Window {id} groups by {by}"))
+                    Response::done(format!("Space {id} groups by {by}"))
                 }
                 Err(error) => refused(&error),
             }
@@ -348,7 +340,7 @@ pub(super) fn container(call: Call<ContainerOp>, cx: &mut App) -> Response {
                     );
                 }
                 let message = format!(
-                    "Attached {} on {} to window {target}",
+                    "Attached {} on {} to space {target}",
                     session.session, session.device
                 );
                 let attached = if target == view.containers.shown_id() {
@@ -386,14 +378,14 @@ pub(super) fn container(call: Call<ContainerOp>, cx: &mut App) -> Response {
                 };
                 if view.detach_session_from(target, &session, cx) {
                     Response::done(format!(
-                        "Detached {} on {} from window {target}",
+                        "Detached {} on {} from space {target}",
                         session.session, session.device
                     ))
                 } else {
                     Response::error(
                         ErrorCode::NotFound,
                         format!(
-                            "Window {target} does not list {} on {}",
+                            "Space {target} does not list {} on {}",
                             session.session, session.device
                         ),
                     )

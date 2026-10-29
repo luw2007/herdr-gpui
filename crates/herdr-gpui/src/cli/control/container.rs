@@ -1,9 +1,10 @@
-//! `container`: the app's Windows.
+//! `space`: the app's Spaces, the global named sets of sessions.
 use super::{Args, CliError, unknown};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ContainerCommand {
     List,
+    Overview,
     New {
         title: Option<String>,
     },
@@ -43,27 +44,28 @@ pub enum ContainerCommand {
     },
 }
 
-pub(super) fn container(args: &mut Args) -> Result<ContainerCommand, CliError> {
+pub(super) fn space(args: &mut Args) -> Result<ContainerCommand, CliError> {
     let Some(verb) = args.verb() else {
         return Ok(ContainerCommand::List);
     };
     Ok(match verb.to_str() {
         Some("list") => ContainerCommand::List,
+        Some("overview") => ContainerCommand::Overview,
         Some("new") => ContainerCommand::New {
             title: args.text_option("--title")?,
         },
         Some("focus") => ContainerCommand::Focus {
-            window: args.required_text("WINDOW")?,
+            window: args.required_text("SPACE")?,
         },
         Some("rename") => ContainerCommand::Rename {
-            window: args.required_text("WINDOW")?,
+            window: args.required_text("SPACE")?,
             title: args.required_text("TITLE")?,
         },
         Some("close") => ContainerCommand::Close {
-            window: args.required_text("WINDOW")?,
+            window: args.required_text("SPACE")?,
         },
         Some("move") => ContainerCommand::Move {
-            window: args.required_text("WINDOW")?,
+            window: args.required_text("SPACE")?,
             position: args
                 .required_text("POSITION")?
                 .parse()
@@ -79,7 +81,7 @@ pub(super) fn container(args: &mut Args) -> Result<ContainerCommand, CliError> {
                 .map_err(|_| CliError::InvalidValue("POSITION"))?,
         },
         Some("group") => ContainerCommand::Group {
-            window: args.required_text("WINDOW")?,
+            window: args.required_text("SPACE")?,
             by: args.required_text("BY")?,
         },
         Some("attach") => ContainerCommand::Attach {
@@ -92,6 +94,6 @@ pub(super) fn container(args: &mut Args) -> Result<ContainerCommand, CliError> {
             window: args.text_option("--in")?,
             session: args.required_text("SESSION")?,
         },
-        _ => return Err(unknown("container", verb)),
+        _ => return Err(unknown("space", verb)),
     })
 }

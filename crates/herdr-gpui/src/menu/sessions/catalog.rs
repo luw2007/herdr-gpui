@@ -62,10 +62,6 @@ pub(crate) struct Facets {
 }
 
 impl Facets {
-    pub(super) fn is_active(&self) -> bool {
-        self.device.is_some() || self.project != ProjectPick::Any
-    }
-
     pub(super) fn admits_device(&self, endpoint_id: &str) -> bool {
         self.device.as_deref().is_none_or(|id| id == endpoint_id)
     }
@@ -88,10 +84,13 @@ pub(in crate::menu) struct Scope {
 }
 
 impl Scope {
-    /// Whether anything, text included, hides sessions. A narrowed list drops
-    /// the Add actions and explanatory notes, which describe the whole list.
+    /// Whether the text, the run state or the project hides sessions. The
+    /// device choice is not a search: it keeps the chosen device's sections
+    /// whole and drops the others, so a kept section still reports its own
+    /// scan and offers Add. A narrowed list drops the Add actions and
+    /// explanatory notes, which describe the whole list.
     pub(super) fn narrows(&self, query: &Query) -> bool {
-        !query.is_empty() || self.filter != Filter::All || self.facets.is_active()
+        !query.is_empty() || self.filter != Filter::All || self.facets.project != ProjectPick::Any
     }
 }
 

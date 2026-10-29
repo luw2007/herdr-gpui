@@ -1,5 +1,5 @@
-//! The strip of logical Windows under the title bar, and the empty state a
-//! Window shows until a session is created in it or an existing one added.
+//! The strip of Spaces under the title bar, and the empty state a Space shows
+//! until a session is created in it or an existing one added.
 use crate::{HerdrWindow, containers::ContainerId};
 use gpui::{prelude::*, *};
 
@@ -8,20 +8,49 @@ const STRIP_HEIGHT: f32 = 26.;
 /// shown in full by the tab's tooltip, so the menu and close buttons stay in
 /// reach whatever the title holds.
 const TAB_MAX_WIDTH: f32 = 220.;
-/// Title of the toast a refused New Window raises; a later success removes it.
-const NEW_WINDOW_FAILED: &str = "New Window failed";
+/// Title of the toast a refused New Space raises; a later success removes it.
+const NEW_SPACE_FAILED: &str = "New Space failed";
 /// What the strip remembers between frames: its scroll position, and the
-/// Window last brought into view, so a scroll by hand is not undone each frame.
+/// Space last brought into view, so a scroll by hand is not undone each frame.
 struct StripScroll {
     handle: ScrollHandle,
     revealed: Option<ContainerId>,
 }
 
+/// The Space Overview entry's mark: a 2x2 grid drawn from squares, so the
+/// strip needs no icon asset of its own.
+const OVERVIEW_GLYPH: f32 = 13.;
+/// Groups the grid's squares so hovering the entry brightens all of them.
+const OVERVIEW_GROUP: &str = "container-strip-overview";
+
+fn overview_glyph(theme: &crate::config::Theme) -> Div {
+    let (ink, bright) = (theme.muted, theme.foreground);
+    let cell = (OVERVIEW_GLYPH - 3.) / 2.;
+    let square = || {
+        div()
+            .size(px(cell))
+            .flex_none()
+            .rounded(px(1.))
+            .bg(rgb(ink))
+            .group_hover(OVERVIEW_GROUP, move |glyph| glyph.bg(rgb(bright)))
+    };
+    let row = || div().flex_none().flex().gap(px(3.));
+    div()
+        .size(px(OVERVIEW_GLYPH))
+        .flex_none()
+        .flex()
+        .flex_col()
+        .gap(px(3.))
+        .child(row().child(square()).child(square()))
+        .child(row().child(square()).child(square()))
+}
+
 impl HerdrWindow {
     /// Shown in every non-Zen window. Besides the tabs it carries the fixed
-    /// Add-session entry, so a lone populated Window keeps a visible way to add
-    /// to itself. Keep its room during the entering chrome slide, just like
-    /// the header; only the settled Zen layout hides it.
+    /// Add-session, New Space and Space Overview entries, so a lone populated
+    /// Space keeps a visible way to add to itself and to see every Space at
+    /// once. Keep its room during the entering chrome slide, just like the
+    /// header; only the settled Zen layout hides it.
     pub(crate) fn container_strip_shown(&self) -> bool {
         !self.zen_layout()
     }
@@ -67,9 +96,10 @@ impl HerdrWindow {
         let mut tabs = div()
             .id("container-tabs")
             .debug_selector(|| "container-tabs".into())
-            // The tabs take the room the two fixed entries leave and scroll
-            // sideways inside it, so Add and New stay reachable in a 640-wide
-            // window whatever the titles or the UI font size.
+            // The tabs take the room the fixed entries leave and scroll
+            // sideways inside it, so Add, New and the Space Overview stay
+            // reachable in a 640-wide window whatever the titles or the UI
+            // font size.
             .flex_1()
             .min_w_0()
             .h_full()
@@ -138,8 +168,8 @@ impl HerdrWindow {
                             .child("\u{d7}")
                             .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
                                 cx.stop_propagation();
-                                // A Window that lists sessions is not closed by a
-                                // stray click: the menu says why instead. An
+                                // A Space that lists sessions is not closed by
+                                // a stray click: the menu says why instead. An
                                 // empty one asks before it goes.
                                 this.request_container_close(id, event.position(), window, cx);
                             })),
@@ -176,9 +206,9 @@ impl HerdrWindow {
                         move |_, cx| {
                             let key = keymap.primary(crate::controls::Command::Sessions);
                             let text = if key.is_empty() {
-                                "Add a session to this Window".to_owned()
+                                "Add a session to this Space".to_owned()
                             } else {
-                                format!("Add a session to this Window ({key})")
+                                format!("Add a session to this Space ({key})")
                             };
                             cx.new(|_| crate::usage::Hint {
                                 text: text.into(),
@@ -201,15 +231,54 @@ impl HerdrWindow {
                     .cursor_pointer()
                     .text_color(rgb(theme.muted))
                     .hover(|s| s.text_color(rgb(theme.foreground)))
-                    .child("+ New Window")
+                    .child("+ New Space")
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.new_container_reporting(cx);
                         window.focus(&this.focus, cx);
                     })),
             )
+            .child(
+                div()
+                    .id("container-space-overview")
+                    .debug_selector(|| "container-space-overview".into())
+                    // Last and never flexible: the tabs give up their room
+                    // first, so this entry stays reachable at a 640-wide
+                    // window however many Spaces or long titles there are.
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(22.))
+                    .rounded(px(crate::config::corners::SMALL))
+                    .cursor_pointer()
+                    .group(OVERVIEW_GROUP)
+                    .hover(|entry| entry.bg(rgb(theme.active)))
+                    .child(overview_glyph(theme))
+                    .tooltip({
+                        let (foreground, surface) = (theme.foreground, theme.surface);
+                        let keymap = self.keymap().clone();
+                        move |_, cx| {
+                            let key = keymap.primary(crate::controls::Command::SpaceOverview);
+                            let text = if key.is_empty() {
+                                "Space Overview".to_owned()
+                            } else {
+                                format!("Space Overview ({key})")
+                            };
+                            cx.new(|_| crate::usage::Hint {
+                                text: text.into(),
+                                foreground,
+                                surface,
+                            })
+                            .into()
+                        }
+                    })
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.toggle_space_overview(window, cx);
+                    })),
+            )
     }
 
-    /// Adds an empty Window for a menu, palette or strip action. A refusal
+    /// Adds an empty Space for a menu, palette or strip action. A refusal
     /// (the registry is full) is a toast, which shows whatever the connection
     /// or the status bar is doing and leaves the connection's own error alone;
     /// a success removes the failure an earlier attempt left.
@@ -218,7 +287,7 @@ impl HerdrWindow {
             Ok(_) => {
                 for endpoint in &mut self.endpoints {
                     endpoint.toasts.entries.retain(|(_, notice)| {
-                        !(notice.is_local_feedback() && notice.title == NEW_WINDOW_FAILED)
+                        !(notice.is_local_feedback() && notice.title == NEW_SPACE_FAILED)
                     });
                 }
                 cx.notify();
@@ -228,13 +297,13 @@ impl HerdrWindow {
                     .toasts
                     .entries
                     .retain(|(_, notice)| {
-                        !(notice.is_local_feedback() && notice.title == NEW_WINDOW_FAILED)
+                        !(notice.is_local_feedback() && notice.title == NEW_SPACE_FAILED)
                     });
-                self.local_transfer_notice(NEW_WINDOW_FAILED, error.to_string(), cx);
+                self.local_transfer_notice(NEW_SPACE_FAILED, error.to_string(), cx);
             }
         }
     }
-    /// What an empty Window shows in place of a terminal.
+    /// What an empty Space shows in place of a terminal.
     pub(crate) fn render_container_empty(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let theme = &self.theme;
         let create_reason = self.local_create_unavailable_reason();
@@ -282,6 +351,11 @@ impl HerdrWindow {
         div()
             .id("container-empty")
             .debug_selector(|| "container-empty".into())
+            // The terminal is the only focus node the window's own handle is
+            // tracked on, so an empty Space would leave the handle unattached:
+            // dismissing the Space Overview focuses it, and that focus would
+            // land nowhere. The empty state stands in for the terminal here.
+            .track_focus(&self.focus)
             .flex_1()
             .size_full()
             .flex()
@@ -293,7 +367,7 @@ impl HerdrWindow {
             .child(
                 div()
                     .text_color(rgb(theme.muted))
-                    .child("This Window has no sessions"),
+                    .child("This Space has no sessions"),
             )
             .child(div().flex().gap(px(10.)).child(create).child(
                 button("container-add-session", "Add existing session").on_click(cx.listener(

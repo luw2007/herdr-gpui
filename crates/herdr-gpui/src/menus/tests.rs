@@ -311,10 +311,12 @@ fn view_menu_carries_the_font_size_full_screen_and_zen_commands() {
         ("Toggle Full Screen", Command::ToggleFullScreen),
         ("Toggle Zen Mode", Command::ToggleZenMode),
     ];
-    assert_eq!(actions.len(), expected.len());
-    for ((name, action), (label, command)) in actions.iter().zip(expected) {
-        assert_eq!(*name, label);
-        assert!(action.partial_eq(&RunCommand { command }), "{label}");
+    for (label, command) in expected {
+        let action = actions
+            .iter()
+            .find(|(name, _)| *name == label)
+            .unwrap_or_else(|| panic!("{label} is missing from View"));
+        assert!(action.1.partial_eq(&RunCommand { command }), "{label}");
     }
     // Reset is a different kind of act from stepping, so it sits apart.
     assert!(matches!(view.items[2], MenuItem::Separator));

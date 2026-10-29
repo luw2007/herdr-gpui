@@ -19,6 +19,7 @@ mod file_drop;
 mod file_links;
 mod find;
 mod flash;
+mod space_overview;
 pub(crate) use commands::run_window_command;
 pub(crate) use flash::Flash;
 mod function_keys;
@@ -128,6 +129,7 @@ pub(crate) struct HerdrWindow {
     pub(crate) containers_dirty: bool,
     /// The open menu of a Window tab, if any.
     pub(crate) container_menu: Option<container_menu::ContainerMenu>,
+    pub(crate) space_overview: Option<space_overview::SpaceOverview>,
     pub(crate) window_id: WindowId,
     pub(crate) selected_endpoint: usize,
     pub(crate) selection_epoch: u64,
@@ -786,6 +788,7 @@ impl HerdrWindow {
             container_restore_pending: false,
             containers_dirty: false,
             container_menu: None,
+            space_overview: None,
             window_id: window.window_handle().window_id(),
             device_filter: None,
             wheel: WheelAccumulator::default(),

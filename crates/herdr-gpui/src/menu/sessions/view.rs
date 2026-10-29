@@ -2,9 +2,8 @@
 //! session the selection is pinned to. Selection is pinned by identity because
 //! the list is rebuilt by asynchronous scans, and an ordinal would slide onto a
 //! different session whenever a row appeared or went away above it.
-#[cfg(unix)]
-use super::catalog::Facets;
-use super::{Entry, Facet, Filter, Page, Row, catalog::Scope};
+use super::catalog::{Facets, Scope};
+use super::{Entry, Facet, Filter, Page, Row};
 use crate::{
     HerdrWindow,
     search_input::{Changed, SearchInput},
@@ -58,6 +57,8 @@ impl HerdrWindow {
         cx.notify();
     }
 
+    /// The footer's device filter is copied in, not shared: this list starts
+    /// where the sidebar is and then moves on its own.
     pub(super) fn open_sessions_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let search = cx.new(SearchInput::new);
         search.update(cx, |input, cx| {
@@ -75,7 +76,13 @@ impl HerdrWindow {
         window.focus(&search.read(cx).focus.clone(), cx);
         self.menu.sessions_view = Some(View {
             search,
-            scope: Scope::default(),
+            scope: Scope {
+                facets: Facets {
+                    device: self.device_filter.clone(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
             expanded: false,
             facet_open: None,
             query: String::new(),
@@ -227,6 +234,13 @@ impl HerdrWindow {
             .unwrap_or_default()
     }
 
+    /// The manager's own device filter, for tests outside this module that
+    /// open it through the control socket.
+    #[cfg(test)]
+    pub(crate) fn session_device_filter(&self) -> Option<String> {
+        self.session_scope().facets.device
+    }
+
     /// Open the manager with `query` typed and `facets` chosen, as
     /// `herdr-gpui sessions` asks.
     #[cfg(unix)]
@@ -243,7 +257,7 @@ impl HerdrWindow {
         }
     }
 
-    pub(super) fn session_query(&self) -> &str {
+    pub(in crate::menu) fn session_query(&self) -> &str {
         self.menu
             .sessions_view
             .as_ref()
