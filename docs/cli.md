@@ -75,7 +75,7 @@ A WINDOW argument is a Window ID from `container list` or its exact name.
 | `container new [--title TITLE]` | Add an empty Window and show it here; no daemon is started |
 | `container focus WINDOW` | Show a Window in this native window only |
 | `container rename WINDOW TITLE` | Rename a Window; names are unique, 1-64 printable characters |
-| `container close WINDOW` | Close an empty Window for every native window; one that lists sessions is refused (exit 1), so detach them first. The last Window is replaced by an empty default |
+| `container close WINDOW` | Ask to close an empty Window for every native window: the app opens its close confirmation in the targeted window and the command answers `close_pending`, so nothing is closed yet. Confirming closes only that Window, and the last Window is replaced by an empty default. A Window that lists sessions is refused (exit 1), so detach them first |
 | `container move WINDOW POSITION` | Move a Window to a 1-based place in the list |
 | `container group WINDOW none\|project\|status\|mr` | Record how the Window's sessions are grouped; the sidebar groups by `project`, `status`, or `mr` (pull request state, derived from each session's saved workspaces; github.com on this machine and SSH devices only, others show Unsupported). The Window's right-click menu offers the same four values. While the shown Window groups by `mr`, its member sessions in the Sessions list carry a compact badge (bucket, PR number, mixed/stale); nothing is shown otherwise |
 | `container attach SESSION [--device ID] [--in WINDOW]` | Attach a session of the shown device (or of `--device`, an ID from `host list`) to the shown Window (or `--in WINDOW`). View only: it creates, stops, and deletes nothing, so create sessions with `herdr` or the Sessions manager |
@@ -88,10 +88,12 @@ A WINDOW argument is a Window ID from `container list` or its exact name.
 | `sessions [QUERY...] [--device DEVICE] [--project PROJECT \| --no-project]` | Open the Sessions manager with an optional saved-project-context search and Device / Project filters |
 
 Window management in the app: right-click a Window tab in the strip, or use the
-`…` on the selected tab, to rename it, close it (only when it lists no
-sessions; the tab's × follows the same rule and otherwise opens the menu), or
-group it by none, project, status or mr. These use the same operations as
-`container rename`, `close` and `group`.
+`…` on the selected tab, to rename it, close it, or group it by none, project,
+status or mr. Closing asks first: **Cancel** keeps the Window and only
+**Close Window** closes it. A Window that lists sessions is not offered for
+close at all (the menu says to detach them first), and the tab's × follows the
+same rules. These use the same operations as `container rename`, `close` and
+`group`, and `container close` cannot skip the confirmation.
 
 `sessions` opens the same manager as the app's Sessions command, in the
 targeted window. Its query matches project, path and labels from saved
@@ -105,7 +107,8 @@ Queries may contain spaces but must be printable and at most 4096 UTF-8 bytes.
 that resolve to no project; the three combine with the query and the manager's
 All/Running/Stopped filter. An unknown device or project exits 5 (not found),
 an ambiguous one exits 1, both before anything opens. In the app, right-click a Window tab to
-rename it, close it (only when it lists no sessions) or choose its grouping.
+rename it, close it (asking first, and only when it lists no sessions) or
+choose its grouping.
 `windows.json` is version 2 only while a session is stopped (`paused`); a file
 without stopped sessions stays version 1, and both are read, so Stop survives a
 restart until the session is selected again.
@@ -311,6 +314,6 @@ request is `{"method", "caller", "op"}`, where `caller` carries the pane,
 workspace, daemon socket, and window, and `op` is tagged with `"op"`. Browser
 requests keep their original flat form (`browser.open`, `browser.reload`,
 `browser.feedback`, `notes.send`). `status` reports the protocol version,
-currently 9. Requests and responses are bounded to 256 KiB, a request that
+currently 10. Requests and responses are bounded to 256 KiB, a request that
 waits says for how long (at most 600 seconds), and the app answers at most a
 few requests at a time.

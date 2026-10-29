@@ -694,7 +694,11 @@ pub(crate) fn run_window_command(
     match command {
         Command::ToggleFullScreen => window.toggle_fullscreen(),
         Command::CycleWindows => cycle_windows(window, cx),
-        Command::CloseWindow => window.remove_window(),
+        // A user close of every kind of window, from the menu or a shortcut:
+        // ask before detaching it, leaving the daemon and its terminals.
+        Command::CloseWindow => {
+            crate::native_close::request_close(window, cx);
+        }
         _ => return false,
     }
     true

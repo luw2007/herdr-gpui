@@ -173,8 +173,8 @@ impl HerdrWindow {
                     }),
             )
             .child(div().flex_1().h_full().min_w(px(24.)))
-            .children(crate::titlebar::controls(window, theme, |window, _| {
-                window.remove_window();
+            .children(crate::titlebar::controls(window, theme, |window, cx| {
+                crate::native_close::request_close(window, cx);
             }));
         crate::titlebar::movable(bar, window)
     }

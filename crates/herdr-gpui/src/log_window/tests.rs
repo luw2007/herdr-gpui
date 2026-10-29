@@ -2,6 +2,7 @@ use super::*;
 use core::prelude::v1::test;
 
 mod line_height;
+mod native_close;
 mod window_commands;
 
 fn records() -> Vec<Arc<Record>> {
@@ -436,6 +437,10 @@ fn shortcuts_focus_search_and_close_only_log_window(cx: &mut TestAppContext) {
     } else {
         "cmd-w"
     });
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt(), "closing Logs asks first");
+    cx.simulate_prompt_answer("Close");
+    cx.run_until_parked();
     assert!(cx.windows() == vec![other.into()]);
 }
 

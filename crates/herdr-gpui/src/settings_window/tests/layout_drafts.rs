@@ -45,6 +45,14 @@ fn layout_clicks_apply_live_without_writing_and_close_commits_only_final(cx: &mu
     }
     cx.simulate_keystrokes(crate::controls::platform_default("cmd-w"));
     cx.run_until_parked();
+    assert!(cx.has_pending_prompt(), "closing Settings asks first");
+    assert!(
+        writes.lock().unwrap().is_empty(),
+        "the prompt writes no draft"
+    );
+    cx.simulate_prompt_answer("Close");
+    cx.run_until_parked();
+    cx.run_until_parked();
     assert_eq!(*writes.lock().unwrap(), [LayoutMode::Superset]);
     assert_eq!(cx.windows().len(), 2);
     view.read_with(cx, |_, cx| {

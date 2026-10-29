@@ -50,11 +50,16 @@ pub(super) fn container(command: ContainerCommand, context: &Context) -> crate::
     };
     match context.call(Request::Container, op)? {
         Response::Done { message } => Ok(Output::message(message)),
-        Response::Container {
-            reply: Reply::Containers { containers },
-        } => {
+        Response::Container { reply } => output(&reply),
+        response => Err(unexpected(response)),
+    }
+}
+
+fn output(reply: &Reply) -> crate::Result<Output> {
+    match reply {
+        Reply::Containers { containers } => {
             let mut text = String::new();
-            for container in &containers {
+            for container in containers {
                 let _ = writeln!(
                     text,
                     "{}{} {} ({})",
@@ -81,8 +86,17 @@ pub(super) fn container(command: ContainerCommand, context: &Context) -> crate::
                     );
                 }
             }
-            Output::data(text.trim_end(), &containers)
+            Output::data(text.trim_end(), containers)
         }
-        response => Err(unexpected(response)),
+        Reply::ClosePending { window } => Output::data(
+            format!(
+                "Asked to close {} ({}); confirm in Herdr UI. Nothing is closed yet",
+                window.title, window.id
+            ),
+            reply,
+        ),
     }
 }
+
+#[cfg(test)]
+mod tests;

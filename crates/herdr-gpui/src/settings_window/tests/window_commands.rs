@@ -50,6 +50,9 @@ fn close_window_saves_the_layout_before_closing(cx: &mut TestAppContext) {
         settings
     });
     cx.run_until_parked();
+    assert!(cx.has_pending_prompt(), "Close Window asks before saving");
+    cx.simulate_prompt_answer("Close");
+    cx.run_until_parked();
     cx.executor()
         .advance_clock(std::time::Duration::from_millis(10));
     cx.run_until_parked();

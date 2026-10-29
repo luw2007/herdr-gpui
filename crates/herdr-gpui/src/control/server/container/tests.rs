@@ -386,3 +386,120 @@ fn an_over_budget_list_gives_unused_shares_to_the_windows_still_cut() {
         assert_eq!(window.sessions_total, MAX_SLOTS);
     }
 }
+
+/// A Window that lists no sessions, so it is eligible to close.
+fn empty_window(window: &WindowHandle<HerdrWindow>, cx: &mut TestAppContext) -> ContainerId {
+    window
+        .update(cx, |view, _, cx| view.new_container(Some("Empty"), cx))
+        .unwrap()
+        .unwrap()
+}
+
+fn close(window: &WindowHandle<HerdrWindow>, reference: &str, cx: &mut TestAppContext) -> Response {
+    cx.update(|cx| {
+        container(
+            Call {
+                caller: addressed(window),
+                op: ContainerOp::Close {
+                    window: reference.into(),
+                },
+            },
+            cx,
+        )
+    })
+}
+
+/// The Window whose close confirmation is showing in `window`.
+fn pending(window: &WindowHandle<HerdrWindow>, cx: &mut TestAppContext) -> Option<ContainerId> {
+    window
+        .update(cx, |view, _, _| view.container_close_pending())
+        .unwrap()
+}
+
+fn present(window: &WindowHandle<HerdrWindow>, id: ContainerId, cx: &mut TestAppContext) -> bool {
+    window
+        .update(cx, |view, _, _| view.containers.set().get(id).is_some())
+        .unwrap()
+}
+
+#[gpui::test]
+fn close_asks_and_closes_nothing(cx: &mut TestAppContext) {
+    let window = shared(cx);
+    let empty = empty_window(&window, cx);
+    let response = close(&window, &empty.to_string(), cx);
+    let Response::Container {
+        reply: Reply::ClosePending { window: asked },
+    } = &response
+    else {
+        panic!("not pending: {response:?}");
+    };
+    assert_eq!(asked.id, empty.to_string());
+    assert_eq!(asked.title, "Empty");
+    assert!(
+        present(&window, empty, cx),
+        "nothing closes until confirmed"
+    );
+    assert_eq!(pending(&window, cx), Some(empty));
+}
+
+#[gpui::test]
+fn a_second_close_while_the_question_is_open_is_busy(cx: &mut TestAppContext) {
+    let window = shared(cx);
+    let empty = empty_window(&window, cx);
+    let first = close(&window, &empty.to_string(), cx);
+    assert!(
+        matches!(
+            first,
+            Response::Container {
+                reply: Reply::ClosePending { .. }
+            }
+        ),
+        "{first:?}"
+    );
+    // The question already holds the window; the CLI never closes by itself
+    // and cannot replace the user's open menu.
+    let second = close(&window, &empty.to_string(), cx);
+    assert_eq!(code(&second), Some(ErrorCode::WindowBusy));
+    assert!(present(&window, empty, cx));
+    assert_eq!(pending(&window, cx), Some(empty));
+}
+
+#[gpui::test]
+fn close_refuses_a_window_that_lists_sessions(cx: &mut TestAppContext) {
+    let window = shared(cx);
+    let full = window
+        .update(cx, |view, _, _| view.containers.containers()[0].id)
+        .unwrap();
+    let response = close(&window, &full.to_string(), cx);
+    assert_eq!(code(&response), Some(ErrorCode::Failed));
+    assert!(message(&response).contains("Detach its sessions first"));
+    assert!(present(&window, full, cx));
+    assert_eq!(pending(&window, cx), None);
+}
+
+#[gpui::test]
+fn confirming_the_asked_window_closes_only_it(cx: &mut TestAppContext) {
+    let window = shared(cx);
+    let full = window
+        .update(cx, |view, _, _| view.containers.containers()[0].id)
+        .unwrap();
+    let empty = empty_window(&window, cx);
+    let response = close(&window, "Empty", cx);
+    assert!(
+        matches!(
+            response,
+            Response::Container {
+                reply: Reply::ClosePending { .. }
+            }
+        ),
+        "{response:?}"
+    );
+    window
+        .update(cx, |view, window, cx| {
+            view.confirm_container_close(window, cx)
+        })
+        .unwrap();
+    assert!(!present(&window, empty, cx));
+    assert!(present(&window, full, cx), "the other Window stays");
+    assert_eq!(pending(&window, cx), None);
+}

@@ -52,6 +52,11 @@ fn command_w_closes_only_settings(cx: &mut TestAppContext) {
         assert!(view.read(cx).focus.is_focused(window));
     });
     cx.simulate_keystrokes(crate::controls::platform_default("cmd-w"));
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt(), "closing Settings asks first");
+    assert_eq!(cx.windows().len(), 2, "the prompt closes nothing");
+    cx.simulate_prompt_answer("Close");
+    cx.run_until_parked();
     assert_eq!(cx.windows(), vec![source.into()]);
 }
 
@@ -72,6 +77,11 @@ fn control_w_closes_only_settings(cx: &mut TestAppContext) {
         view
     });
     cx.simulate_keystrokes("ctrl-w");
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt(), "closing Settings asks first");
+    assert_eq!(cx.windows().len(), 2, "the prompt closes nothing");
+    cx.simulate_prompt_answer("Close");
+    cx.run_until_parked();
     assert_eq!(cx.windows(), vec![source.into()]);
 }
 
@@ -99,6 +109,10 @@ fn settings_shortcut_and_session_shortcuts_do_not_route_to_source(cx: &mut TestA
     assert_eq!(cx.windows().len(), 1);
     view.read_with(cx, |view, _| assert!(!view.busy()));
     cx.simulate_keystrokes(crate::controls::platform_default("cmd-w"));
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt());
+    cx.simulate_prompt_answer("Close");
+    cx.run_until_parked();
     assert!(cx.windows().is_empty());
 }
 

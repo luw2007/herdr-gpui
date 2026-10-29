@@ -1,14 +1,16 @@
 //! `container`: the app's global Windows, as seen from one native window.
-use super::{in_free_window, in_window};
+use super::{in_free_window, in_window, work::flows::bring_forward};
 use crate::{
     HerdrWindow,
     containers::{ContainerError, ContainerId, ContainerSet, Grouping},
     control::protocol::{
         Call, ErrorCode, Response,
-        container::{ContainerInfo, ContainerOp, LIST_BUDGET, Reply, SlotInfo, valid_name},
+        container::{
+            ContainerInfo, ContainerOp, LIST_BUDGET, Reply, SlotInfo, WindowRef, valid_name,
+        },
     },
 };
-use gpui::App;
+use gpui::{App, Point};
 use herdr_client::{DeviceKey, SessionRef};
 
 impl HerdrWindow {
@@ -197,17 +199,51 @@ pub(super) fn container(call: Call<ContainerOp>, cx: &mut App) -> Response {
                 Err(response) => response,
             }
         }),
-        ContainerOp::Close { window } => in_free_window(caller, cx, |view, _, cx| {
-            view.sync_containers(cx);
-            let id = match find(view.containers.set(), &window) {
-                Ok(id) => id,
-                Err(response) => return response,
-            };
-            match view.close_container(id, cx) {
-                Ok(()) => Response::done(format!("Closed window {id}")),
-                Err(error) => refused(&error),
-            }
-        }),
+        ContainerOp::Close { window: reference } => {
+            in_free_window(caller, cx, |view, window, cx| {
+                view.sync_containers(cx);
+                let id = match find(view.containers.set(), &reference) {
+                    Ok(id) => id,
+                    Err(response) => return response,
+                };
+                // The same rule the tab menu and the strip's × follow: a Window
+                // that lists sessions is refused outright.
+                let Some(container) = view.containers.set().get(id) else {
+                    return Response::error(ErrorCode::NotFound, format!("No window {reference}"));
+                };
+                let title = container.title.clone();
+                if !container.members.is_empty() {
+                    return refused(&ContainerError::NotEmpty);
+                }
+                // A menu already open in the window is the user's: do not replace
+                // it with a question they did not ask for.
+                if view.container_menu.is_some() {
+                    return Response::error(
+                        ErrorCode::WindowBusy,
+                        "A Window menu is open in the window; close it first",
+                    );
+                }
+                let anchor = {
+                    let viewport = window.viewport_size();
+                    Point::new(viewport.width * 0.5, viewport.height * 0.5)
+                };
+                if !view.open_container_close_confirmation(id, anchor, window, cx) {
+                    return Response::error(
+                        ErrorCode::Failed,
+                        "The close confirmation did not open; try again",
+                    );
+                }
+                bring_forward(window, cx);
+                Response::Container {
+                    reply: Reply::ClosePending {
+                        window: WindowRef {
+                            id: id.to_string(),
+                            title,
+                        },
+                    },
+                }
+            })
+        }
         ContainerOp::Move { window, position } => in_free_window(caller, cx, |view, _, cx| {
             view.sync_containers(cx);
             let id = match find(view.containers.set(), &window) {

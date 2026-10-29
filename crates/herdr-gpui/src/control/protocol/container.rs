@@ -27,8 +27,9 @@ pub(crate) enum ContainerOp {
     Focus { window: String },
     /// Rename the Window `window` (its ID or exact name).
     Rename { window: String, title: String },
-    /// Close the Window `window` for every native window. Only an empty one
-    /// closes; sessions are never touched.
+    /// Ask to close the Window `window` (its ID or exact name). Nothing closes
+    /// yet: the app opens its close confirmation there, and the user confirms
+    /// or cancels. Only an empty one closes; sessions are never touched.
     Close { window: String },
     /// Attach session `session` of `device` (default: the device the window
     /// shows) to `window` (default: the one this native window shows).
@@ -87,9 +88,21 @@ pub(crate) struct ContainerInfo {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct WindowRef {
+    pub id: String,
+    pub title: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum Reply {
-    Containers { containers: Vec<ContainerInfo> },
+    Containers {
+        containers: Vec<ContainerInfo>,
+    },
+    /// The close confirmation is open in the window, awaiting the user.
+    ClosePending {
+        window: WindowRef,
+    },
 }
 
 #[cfg(any(unix, test))]

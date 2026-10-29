@@ -9,6 +9,7 @@ use std::sync::{
 mod config_watch;
 mod layout_drafts;
 mod load_save;
+mod native_close;
 mod navigation_resize;
 mod navigation_scroll;
 mod quit_saves;

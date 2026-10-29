@@ -139,10 +139,9 @@ impl HerdrWindow {
                             .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
                                 cx.stop_propagation();
                                 // A Window that lists sessions is not closed by a
-                                // stray click: the menu says why instead.
-                                if this.close_container(id, cx).is_err() {
-                                    this.open_container_menu(id, event.position(), window, cx);
-                                }
+                                // stray click: the menu says why instead. An
+                                // empty one asks before it goes.
+                                this.request_container_close(id, event.position(), window, cx);
                             })),
                     )
                     .on_mouse_down(

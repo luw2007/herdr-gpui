@@ -94,7 +94,10 @@ fn open_deferred(cx: &mut App) {
             app_owns_titlebar_drag: cfg!(target_os = "macos"),
             ..Default::default()
         },
-        |window, cx| cx.new(|cx| LogWindow::new(window, cx)),
+        |window, cx| {
+            crate::native_close::install(window, cx);
+            cx.new(|cx| LogWindow::new(window, cx))
+        },
     ) {
         Ok(handle) => cx.set_global(LogWindowHandle(Some(handle))),
         Err(_) => tracing::error!("Unable to open log window"),
@@ -483,14 +486,16 @@ impl Render for LogWindow {
                 offset_in_item: px(0.),
             });
         }
-        let header = crate::titlebar::header(&self.appearance.theme, window, |window, _| {
-            window.remove_window();
+        let header = crate::titlebar::header(&self.appearance.theme, window, |window, cx| {
+            crate::native_close::request_close(window, cx);
         });
         let Appearance { config, theme } = &self.appearance;
         let root = div()
             .key_context("LogWindow")
             .track_focus(&self.focus)
-            .on_action(cx.listener(|_, _: &Close, window, _| window.remove_window()))
+            .on_action(cx.listener(|_, _: &Close, window, cx| {
+                crate::native_close::request_close(window, cx);
+            }))
             .on_action(cx.listener(|_, action: &crate::RunCommand, window, cx| {
                 crate::window::run_window_command(action.command, window, cx);
             }))

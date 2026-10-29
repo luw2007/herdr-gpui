@@ -1,7 +1,8 @@
 //! The menu of a Window tab: adding or creating a session in it, rename,
-//! close (only an empty Window), and how its sessions are to be grouped. Every
-//! write goes through the same methods the `container` CLI uses, so the rules
-//! live in one place.
+//! close (an empty Window, after a second confirmation), and how its sessions
+//! are to be grouped. Every write goes through the same methods the `container`
+//! CLI uses, so the rules live in one place; closing always asks here, so no
+//! entry point (menu row, tab ×, or `container close`) closes a Window alone.
 use crate::{
     HerdrWindow,
     containers::{Container, ContainerError, ContainerId, Grouping},
@@ -18,6 +19,8 @@ mod tests;
 enum Mode {
     Actions,
     Rename,
+    /// The second step of closing: the menu asks, and only the button closes.
+    ConfirmClose,
 }
 
 pub(super) const CLOSE_REFUSED: &str = "Detach its sessions first";
@@ -109,15 +112,72 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.containers.set().get(id).is_none() {
+        self.open_container_menu_in(id, anchor, Mode::Actions, window, cx);
+    }
+
+    /// Opens the menu already asking whether to close the Window, as the tab's
+    /// `×` and `herdr-gpui container close` do. Nothing is closed until the
+    /// user confirms; whether the menu is now showing that question.
+    pub(crate) fn open_container_close_confirmation(
+        &mut self,
+        id: ContainerId,
+        anchor: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.open_container_menu_in(id, anchor, Mode::ConfirmClose, window, cx) {
+            return false;
+        }
+        self.container_menu
+            .as_ref()
+            .is_some_and(|menu| menu.mode == Mode::ConfirmClose)
+    }
+
+    /// The tab's `×`: asks before closing an empty Window, and shows why a
+    /// Window that lists sessions is not closed at all.
+    pub(crate) fn request_container_close(
+        &mut self,
+        id: ContainerId,
+        anchor: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(empty) = self
+            .containers
+            .set()
+            .get(id)
+            .map(|container| container.members.is_empty())
+        else {
             return;
+        };
+        if !empty {
+            self.open_container_menu(id, anchor, window, cx);
+            if let Some(menu) = self.container_menu.as_mut() {
+                menu.error = Some(CLOSE_REFUSED.to_owned());
+            }
+            cx.notify();
+            return;
+        }
+        self.open_container_close_confirmation(id, anchor, window, cx);
+    }
+
+    fn open_container_menu_in(
+        &mut self,
+        id: ContainerId,
+        anchor: Point<Pixels>,
+        mode: Mode,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.containers.set().get(id).is_none() {
+            return false;
         }
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         self.container_menu = Some(ContainerMenu {
             id,
             anchor,
-            mode: Mode::Actions,
+            mode,
             highlight: 0,
             scroll: ScrollHandle::new(),
             error: None,
@@ -125,6 +185,7 @@ impl HerdrWindow {
             input: cx.new(SearchInput::new),
         });
         cx.notify();
+        true
     }
 
     fn dismiss_container_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -174,10 +235,7 @@ impl HerdrWindow {
                 }
             }
             Row::Rename => self.begin_container_rename(id, window, cx),
-            Row::Close => match self.close_container(id, cx) {
-                Ok(()) => self.dismiss_container_menu(window, cx),
-                Err(error) => self.container_menu_failed(&error, cx),
-            },
+            Row::Close => self.begin_container_close(cx),
             Row::Group(grouping) => {
                 match self.edit_containers(cx, |set| set.set_grouping(id, grouping)) {
                     Ok(()) => {
@@ -188,6 +246,46 @@ impl HerdrWindow {
                 }
             }
         }
+    }
+
+    /// The Close row asks: the menu becomes the confirmation, and the Window
+    /// stays until the user picks Close Window there.
+    fn begin_container_close(&mut self, cx: &mut Context<Self>) {
+        let Some(menu) = self.container_menu.as_mut() else {
+            return;
+        };
+        menu.mode = Mode::ConfirmClose;
+        menu.error = None;
+        cx.notify();
+    }
+
+    /// Close Window, the confirmation's only closing button. It re-checks the
+    /// shared registry, so a session attached since the question opened keeps
+    /// the Window and shows the refusal here.
+    fn submit_container_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.container_menu.as_ref().map(|menu| menu.id) else {
+            return;
+        };
+        match self.close_container(id, cx) {
+            Ok(()) => self.dismiss_container_menu(window, cx),
+            Err(error) => self.container_menu_failed(&error, cx),
+        }
+    }
+
+    /// The Window whose close confirmation is showing, for control tests that
+    /// must prove `container close` only asks.
+    #[cfg(all(test, unix))]
+    pub(crate) fn container_close_pending(&self) -> Option<ContainerId> {
+        self.container_menu
+            .as_ref()
+            .filter(|menu| menu.mode == Mode::ConfirmClose)
+            .map(|menu| menu.id)
+    }
+
+    /// What the user's Close Window click runs, for control tests.
+    #[cfg(all(test, unix))]
+    pub(crate) fn confirm_container_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.submit_container_close(window, cx);
     }
 
     fn begin_container_rename(
@@ -238,6 +336,7 @@ impl HerdrWindow {
             return;
         };
         let renaming = menu.mode == Mode::Rename;
+        let confirming = menu.mode == Mode::ConfirmClose;
         // The OS owns Enter and Escape while a composition is open.
         if renaming && menu.input.read(cx).is_composing() {
             return;
@@ -248,12 +347,14 @@ impl HerdrWindow {
         match key {
             "escape" => self.dismiss_container_menu(window, cx),
             "enter" if renaming => self.submit_container_rename(window, cx),
+            // The confirmation's own button closes; a stray Enter cancels.
+            "enter" if confirming => self.dismiss_container_menu(window, cx),
             "enter" => {
                 if let Some(row) = ROWS.get(highlight) {
                     self.container_menu_activate(*row, window, cx);
                 }
             }
-            "up" | "down" if !renaming => {
+            "up" | "down" if !renaming && !confirming => {
                 let count = ROWS.len();
                 if let Some(menu) = self.container_menu.as_mut() {
                     menu.highlight = if key == "down" {

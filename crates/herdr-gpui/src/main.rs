@@ -85,6 +85,7 @@ mod merged_cleanup;
 #[cfg(feature = "mockup")]
 mod mockup;
 mod motion;
+mod native_close;
 mod navigation;
 mod notifications;
 mod orchestrator;

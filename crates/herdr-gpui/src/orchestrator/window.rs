@@ -20,7 +20,9 @@ pub(crate) struct OrchestratorWindow {
 impl Render for OrchestratorWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = self.view.read(cx).theme().clone();
-        let header = crate::titlebar::header(&theme, window, |window, _| window.remove_window());
+        let header = crate::titlebar::header(&theme, window, |window, cx| {
+            crate::native_close::request_close(window, cx);
+        });
         div()
             .size_full()
             .flex()
@@ -60,7 +62,10 @@ impl HerdrWindow {
                 app_owns_titlebar_drag: cfg!(target_os = "macos"),
                 ..Default::default()
             },
-            |_, cx| cx.new(|_| OrchestratorWindow { view: view.clone() }),
+            |window, cx| {
+                crate::native_close::install(window, cx);
+                cx.new(|_| OrchestratorWindow { view: view.clone() })
+            },
         );
         match opened {
             Ok(handle) => {

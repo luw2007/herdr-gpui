@@ -133,6 +133,7 @@ fn open_window_placed(
             ..Default::default()
         },
         |window, cx| {
+            crate::native_close::install(window, cx);
             cx.new(|cx| {
                 let mut view = HerdrWindow::new(
                     target,

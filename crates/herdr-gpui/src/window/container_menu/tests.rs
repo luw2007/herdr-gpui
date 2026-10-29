@@ -9,6 +9,7 @@ use crate::{
 };
 use gpui::{Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext, px, size};
 
+mod close_confirmation;
 mod session_create;
 mod session_entry;
 
@@ -136,7 +137,7 @@ fn cancelling_a_rename_changes_nothing(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn close_is_refused_for_a_window_with_sessions_and_works_for_an_empty_one(cx: &mut TestAppContext) {
+fn close_is_refused_for_a_window_with_sessions_and_asks_for_an_empty_one(cx: &mut TestAppContext) {
     let (view, cx, full, empty) = two_windows(cx);
     right_click_tab(cx, full);
     click(cx, "container-menu-close");
@@ -151,6 +152,7 @@ fn close_is_refused_for_a_window_with_sessions_and_works_for_an_empty_one(cx: &m
         assert_eq!(view.containers.containers().len(), 2);
     });
     assert!(menu_open(&view, cx));
+    assert!(bounds_of(cx, "container-menu-close-confirm").is_none());
     // The strip's × follows the same rule: it closes nothing and shows the menu.
     view.update(cx, |view, cx| {
         view.container_menu = None;
@@ -162,6 +164,7 @@ fn close_is_refused_for_a_window_with_sessions_and_works_for_an_empty_one(cx: &m
         assert!(view.containers.set().get(full).is_some());
     });
     assert!(menu_open(&view, cx));
+    assert!(bounds_of(cx, "container-menu-error").is_some());
 
     view.update(cx, |view, cx| {
         view.container_menu = None;
@@ -170,6 +173,12 @@ fn close_is_refused_for_a_window_with_sessions_and_works_for_an_empty_one(cx: &m
     draw(cx);
     right_click_tab(cx, empty);
     click(cx, "container-menu-close");
+    // Asking leaves the Window there; only Close Window closes it.
+    view.read_with(cx, |view, _| {
+        assert!(view.containers.set().get(empty).is_some());
+    });
+    assert!(menu_open(&view, cx));
+    click(cx, "container-menu-close-confirm");
     view.read_with(cx, |view, _| {
         assert!(view.containers.set().get(empty).is_none());
         assert!(view.containers.set().get(full).is_some());
@@ -292,4 +301,28 @@ fn the_menu_and_the_strip_stay_inside_a_small_window(cx: &mut TestAppContext) {
     }
     // The strip is still laid out whole behind the overlay.
     assert_eq!(bounds_of(cx, "container-strip").unwrap(), strip);
+}
+
+#[gpui::test]
+fn the_close_confirmation_stays_inside_a_small_window(cx: &mut TestAppContext) {
+    let (view, cx, _, empty) = two_windows(cx);
+    let viewport = gpui::Bounds::new(gpui::point(px(0.), px(0.)), size(px(640.), px(360.)));
+    cx.update(|window, cx| {
+        view.update(cx, |view, cx| {
+            let corner = gpui::point(px(639.), px(359.));
+            assert!(view.open_container_close_confirmation(empty, corner, window, cx));
+        })
+    });
+    draw(cx);
+    for selector in [
+        "container-menu-close-panel",
+        "container-menu-close-cancel",
+        "container-menu-close-confirm",
+    ] {
+        let bounds = bounds_of(cx, selector).unwrap();
+        assert!(bounds.left() >= viewport.left(), "{selector}");
+        assert!(bounds.top() >= viewport.top(), "{selector}");
+        assert!(bounds.right() <= viewport.right(), "{selector}");
+        assert!(bounds.bottom() <= viewport.bottom(), "{selector}");
+    }
 }

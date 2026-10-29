@@ -204,8 +204,10 @@ fn open_with(
             });
             let weak = model.downgrade();
             window.on_window_should_close(cx, move |window, cx| {
-                weak.update(cx, |view, cx| view.should_close(window, cx))
-                    .unwrap_or(true)
+                // Keep the window open while the prompt, and any pending save it
+                // agrees to, run; the confirmed path closes it itself.
+                weak.update(cx, |view, cx| view.request_close(window, cx))
+                    .is_err()
             });
             let focus = model.read(cx).focus.clone();
             window.focus(&focus, cx);
@@ -528,7 +530,25 @@ impl SettingsWindow {
         self.theme_intent.is_some()
     }
 
-    /// Shared entry point for the native titlebar and keyboard close actions.
+    /// The user's close paths — the native titlebar, the window menu, and the
+    /// keyboard close actions — ask before closing, so a stray click or
+    /// shortcut keeps the window and its pending edits. Agreeing runs the
+    /// close pipeline, which saves before the window goes.
+    pub(super) fn request_close(&mut self, window: &Window, cx: &mut Context<Self>) {
+        if self.closing.is_some() {
+            return;
+        }
+        let handle = window.window_handle();
+        let weak = cx.weak_entity();
+        crate::native_close::request(handle, cx, move |cx| {
+            let _ = handle.update(cx, |_, window, cx| {
+                let _ = weak.update(cx, |view, cx| view.close(window, cx));
+            });
+        });
+    }
+
+    /// The agreed close: finishes inline edits, then either closes at once or
+    /// saves the pending theme and layout drafts before closing.
     pub(super) fn should_close(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         if self.closing.is_some() {
             return false;
@@ -549,6 +569,8 @@ impl SettingsWindow {
         false
     }
 
+    /// Closes after the user agreed in [`Self::request_close`], saving the
+    /// pending theme and layout drafts first when either is outstanding.
     pub(super) fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.should_close(window, cx) {
             window.remove_window();
@@ -753,7 +775,7 @@ impl Render for SettingsWindow {
         let font_picker = self.render_control_font_picker(window, cx);
         let this = cx.entity().downgrade();
         let header = crate::titlebar::header(&self.theme, window, move |window, cx| {
-            let _ = this.update(cx, |view, cx| view.close(window, cx));
+            let _ = this.update(cx, |view, cx| view.request_close(window, cx));
         });
         let theme = &self.theme;
         let root = div()
@@ -762,8 +784,8 @@ impl Render for SettingsWindow {
             .track_focus(&self.focus)
             .on_action(cx.listener(|this, action: &crate::RunCommand, window, cx| {
                 match action.command {
-                    // Its own close path, which saves pending edits first.
-                    crate::controls::Command::CloseWindow => this.close(window, cx),
+                    // Its own close path, which asks, then saves pending edits.
+                    crate::controls::Command::CloseWindow => this.request_close(window, cx),
                     command if crate::window::run_window_command(command, window, cx) => {}
                     crate::controls::Command::Settings => window.activate_window(),
                     crate::controls::Command::NewWindow => {
@@ -779,7 +801,7 @@ impl Render for SettingsWindow {
             }))
             .on_action(cx.listener(|this, _: &Close, window, cx| {
                 cx.stop_propagation();
-                this.close(window, cx);
+                this.request_close(window, cx);
             }))
             .size_full()
             .flex()

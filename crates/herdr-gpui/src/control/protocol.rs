@@ -18,8 +18,9 @@ use serde::{Deserialize, Serialize};
 /// an outdated app from a refused request. 4: queried Sessions manager.
 /// 5: projects. 6: logical Windows (`container`). 7: Windows managed by name.
 /// 8: `sessions` Device and Project filters. 9: `container list` reports
-/// `sessions_total` and cuts a long list to a byte budget.
-pub(crate) const PROTOCOL_VERSION: u32 = 9;
+/// `sessions_total` and cuts a long list to a byte budget. 10: `container
+/// close` asks in the app and answers `close_pending`.
+pub(crate) const PROTOCOL_VERSION: u32 = 10;
 
 /// Older apps and clients know only tabs, so a tab is left off the wire.
 fn is_tab(placement: &Placement) -> bool {
@@ -409,7 +410,7 @@ mod tests {
 
     #[test]
     fn container_requests_and_replies_round_trip() {
-        use super::container::{ContainerInfo, ContainerOp, Reply, SlotInfo};
+        use super::container::{ContainerInfo, ContainerOp, Reply, SlotInfo, WindowRef};
         for op in [
             ContainerOp::List,
             ContainerOp::New {
@@ -475,6 +476,20 @@ mod tests {
                 }],
             },
         };
+        let pending = Response::Container {
+            reply: Reply::ClosePending {
+                window: WindowRef {
+                    id: "7a8f3b0e-6a52-4c6e-9d57-0b6f1a9f7d11".into(),
+                    title: "Window 1".into(),
+                },
+            },
+        };
+        let text = serde_json::to_string(&pending).unwrap();
+        assert_eq!(
+            text,
+            r#"{"status":"container","reply":{"kind":"close_pending","window":{"id":"7a8f3b0e-6a52-4c6e-9d57-0b6f1a9f7d11","title":"Window 1"}}}"#
+        );
+        assert_eq!(serde_json::from_str::<Response>(&text).unwrap(), pending);
         let text = serde_json::to_string(&response).unwrap();
         assert_eq!(serde_json::from_str::<Response>(&text).unwrap(), response);
         assert!(container::valid_name("work"));

@@ -129,10 +129,16 @@ disabled with a reason when local creation is unavailable (an explicit
 `--socket` or `--dev` target, or another session change still finishing); Add
 existing is always offered. The same menu lets you **Rename** it (names stay
 unique), **Close** it, or choose **Group by** None, Project, Status or Merge
-request (`mr`). Close is offered only for a Window with no sessions, as
+request (`mr`). **Close** asks first: the menu becomes **Close Window?** with
+**Cancel** and **Close Window**, and only the latter closes it, re-checking
+the shared registry so a session attached meanwhile keeps the Window and shows
+the refusal. Close is offered only for a Window with no sessions, as
 `container close` refuses a non-empty one (detach its sessions first); the `×`
-on a tab follows the same rule. Rename, close and group call the same registry
-operations as `herdr-gpui container rename|close|group`.
+on a tab follows the same rule, opening the same confirmation for an empty
+Window. `herdr-gpui container close` opens that confirmation in the targeted
+native window and answers `close_pending`, so it cannot close a Window behind
+the user's back. Rename, close and group call the same registry operations as
+`herdr-gpui container rename|close|group`.
 The tabs scroll independently of the fixed Add/New entries. Long titles
 truncate with a tooltip; the action menu stays inside the viewport and scrolls
 when needed for a large UI font. Keyboard navigation reveals the selected row,
@@ -208,7 +214,10 @@ dragging a workspace still reorders it within its own session.
 Normal launches restore the main windows left open at quit, including each
 window's size and screen position, using the current launch's connection options.
 Closing an individual window removes it from the saved set; closing the final
-main window retains its geometry for next time. Additional windows cascade from
+main window retains its geometry for next time. Every user close of a native
+window — its close button, the window menu, or a close shortcut — asks first,
+with Cancel as the default answer; the daemon and its terminals keep running
+either way. Additional windows cascade from
 the last open main window. Fullscreen windows restore to their normal rectangle.
 Each window reopens on the display it was on; if that display is disconnected,
 it opens on the primary display, resized and moved to fit. Logs windows
@@ -848,8 +857,10 @@ in-memory draft: browsing does not write or reload the TOML configuration.
 Uncached theme definition files load in the background; recent definitions are
 cached for quick switching.
 
-Closing Settings, through its native close button or Cmd-W/Ctrl-W, saves only the
-final theme and sidebar layout selections. Quitting also flushes those selections. Closing waits for
+Closing Settings, through its native close button, Cmd-W/Ctrl-W, or the window
+menu, asks first; Cancel keeps the window and its drafts. Agreeing saves only the
+final theme and sidebar layout selections. Quitting also flushes those
+selections. Closing waits for
 accepted work without blocking the UI; a save failure keeps Settings open with
 the draft and an error so it can be retried. Other controls keep their existing
 automatic-save behavior without resetting the live theme or layout. Reload also
@@ -1571,8 +1582,9 @@ Every window then draws its own: pressing the header starts a compositor move
 (a double-click maximizes or restores instead), a right-click opens the compositor's window menu when it offers one, and the
 header ends in minimize, maximize/restore, and close buttons, each shown only
 when the compositor supports it, with close always present. Secondary windows
-show the header in this mode too. Close runs the window's own close path, so
-Settings still finishes pending preferences first. A 10px transparent band
+show the header in this mode too. Close asks for confirmation, then runs the
+window's own close path, so Settings still finishes pending preferences first.
+A 10px transparent band
 around the window carries a shadow and the resize handles; edges the
 compositor tiles lose both, so a maximized window fills the screen. X11 and
 compositors with server-side decorations keep their native frame.

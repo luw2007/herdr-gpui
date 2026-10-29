@@ -31,6 +31,14 @@ fn keyboard_close_writes_final_draft_once_and_browsing_never_reloads_config(
     }
     cx.simulate_keystrokes(crate::controls::platform_default("cmd-w"));
     cx.run_until_parked();
+    assert!(cx.has_pending_prompt(), "closing Settings asks first");
+    assert!(
+        writes.lock().unwrap().is_empty(),
+        "the prompt writes no draft"
+    );
+    cx.simulate_prompt_answer("Close");
+    cx.run_until_parked();
+    cx.run_until_parked();
     assert_eq!(*writes.lock().unwrap(), ["Nord"]);
     assert_eq!(reloads.load(Ordering::SeqCst), 1);
     assert_eq!(cx.windows(), [source.into()]);

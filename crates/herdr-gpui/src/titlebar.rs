@@ -346,8 +346,8 @@ impl HerdrWindow {
                     ),
             )
             .when(!cfg!(target_os = "linux"), |end| {
-                end.children(controls(window, &self.theme, |window, _| {
-                    window.remove_window();
+                end.children(controls(window, &self.theme, |window, cx| {
+                    crate::native_close::request_close(window, cx);
                 }))
             })
     }
