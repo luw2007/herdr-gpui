@@ -64,8 +64,8 @@ impl Row {
         match self {
             Self::CreateSession => "Create session",
             Self::AddSession => "Add existing session",
-            Self::Rename => "Rename Window",
-            Self::Close => "Close Window",
+            Self::Rename => "Rename Space",
+            Self::Close => "Close Space",
             Self::Group(Grouping::None) => "None",
             Self::Group(Grouping::Project) => "Project",
             Self::Group(Grouping::Status) => "Status",

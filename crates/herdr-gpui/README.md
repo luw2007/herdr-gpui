@@ -129,10 +129,10 @@ disabled with a reason when local creation is unavailable (an explicit
 `--socket` or `--dev` target, or another session change still finishing); Add
 existing is always offered. The same menu lets you **Rename** it (names stay
 unique), **Close** it, or choose **Group by** None, Project, Status or Merge
-request (`mr`). **Close** asks first: the menu becomes **Close Window?** with
-**Cancel** and **Close Window**, and only the latter closes it, re-checking
-the shared registry so a session attached meanwhile keeps the Window and shows
-the refusal. Close is offered only for a Window with no sessions, as
+request (`mr`). Logical containers are named **Spaces** in the close and rename
+dialogs: **Close Space?** offers **Cancel** and **Close Space**, and only the
+latter closes it, re-checking the shared registry so a session attached meanwhile
+keeps the Space and shows the refusal. Close is offered only for a Space with no sessions, as
 `container close` refuses a non-empty one (detach its sessions first); the `×`
 on a tab follows the same rule, opening the same confirmation for an empty
 Window. `herdr-gpui container close` opens that confirmation in the targeted

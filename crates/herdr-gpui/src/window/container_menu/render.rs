@@ -235,7 +235,7 @@ impl HerdrWindow {
                 div()
                     .px(px(3.))
                     .text_color(rgb(theme.muted))
-                    .child("Rename Window"),
+                    .child("Rename Space"),
             )
             .child(menu.input.clone())
             .when_some(menu.error.clone(), |panel, error| {
@@ -272,7 +272,7 @@ impl HerdrWindow {
             )
     }
 
-    /// The second step of closing a Window: Cancel keeps it, Close Window
+    /// The second step of closing a Space: Cancel keeps it, Close Space
     /// closes only it, and Escape or the backdrop keep it too.
     fn container_menu_confirm_close(
         &self,
@@ -301,7 +301,7 @@ impl HerdrWindow {
                 div()
                     .px(px(3.))
                     .font_weight(FontWeight::SEMIBOLD)
-                    .child("Close Window?"),
+                    .child("Close Space?"),
             )
             .child(
                 div()
@@ -314,7 +314,7 @@ impl HerdrWindow {
                 div()
                     .px(px(3.))
                     .text_color(rgb(theme.muted))
-                    .child("Only this Window goes away; Herdr and its sessions keep running."),
+                    .child("Only this Space goes away; Herdr and its sessions keep running."),
             )
             .when_some(menu.error.clone(), |panel, error| {
                 panel.child(
@@ -340,7 +340,7 @@ impl HerdrWindow {
                         ),
                     )
                     .child(
-                        button("container-menu-close-confirm", "Close Window", true).on_click(
+                        button("container-menu-close-confirm", "Close Space", true).on_click(
                             cx.listener(|this, _, window, cx| {
                                 cx.stop_propagation();
                                 this.submit_container_close(window, cx);
